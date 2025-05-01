@@ -1,0 +1,1130 @@
+// gui/kiosk.py
+# kiosk.py: Main application file for the media kiosk GUI
+#
+# Overview:
+# This file defines the KioskGUI class, the main PyQt5 application window for a media kiosk
+# running on a Raspberry Pi 5 with X11 (QT_QPA_PLATFORM=xcb). The application provides a
+# touchscreen interface (787x492px window, mimicking a 10" display on a 24" 1920x1080 monitor)
+# for managing media playback (via mpv), network share syncing, and scheduling. It handles
+# authentication, source selection (e.g., Local Files), and navigation between screens.
+#
+# Key Functionality:
+# - Initializes the main window (787x492px, gradient background) and QStackedWidget for screen navigation.
+# - Displays AuthDialog (245x184px, PIN 1234, no title bar) at startup, hiding the main window until authentication.
+# - Manages source screens (e.g., Local Files: 30pt title, 20pt fonts, 2/3 file listbox, 1/3 TV outputs, yellow #f1c40f text).
+# - Coordinates playback (via playback.py), network sync (via utilities.py), and scheduling (via schedule library).
+# - Maintains state: input_map (source-to-input mapping), input_paths, input_output_map, active_inputs, media_processes.
+#
+# Environment:
+# - Raspberry Pi 5, X11, PyQt5, mpv for playback.
+# - Logs: /home/admin/gui/logs/kiosk.log (app), /home/admin/gui/logs/mpv.log (mpv output).
+# - Videos: /home/admin/videos (local), /mnt/share (network share).
+# - Icons: /home/admin/gui/icons (64x64px for sources, playback; 32x32px for back).
+#
+# Recent Fixes (as of April 2025):
+# - Fixed AuthDialog visibility: No parent, QTimer delay, screen-centered, Qt.FramelessWindowHint.
+# - Hid main window until authentication by removing kiosk.show() from main block.
+# - Added show_source_screen to fix AttributeError in interface.py for Local Files navigation.
+# - Added input_map to fix AttributeError in playback.py for toggle_play_pause.
+# - Mitigated GLib-GObject-CRITICAL errors with disconnect() and deleteLater().
+# - Fixed schedule import for utilities.py run_scheduler.
+#
+# Known Considerations:
+# - Network share sync (~45 seconds for one file) may need optimization (see utilities.py).
+# - HDMI output targeting (--fs-screen=0 in playback.py) may need adjustment based on xrandr output.
+# - Ensure /home/admin/videos files are accessible and mpv is installed.
+# - Monitor logs for playback or sync issues: kiosk.log, mpv.log, mpv_err.log.
+#
+# Dependencies:
+# - PyQt5: GUI framework.
+# - schedule: Task scheduling.
+# - mpv: Media playback (external binary).
+# - Files: auth_dialog.py, interface.py, playback.py, source_screen.py, utilities.py, schedule_dialog.py.
+
+import sys
+import os
+import signal
+import hashlib
+import threading
+import logging
+import schedule
+from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget, QDialog, QLabel, QVBoxLayout
+from PyQt5.QtCore import Qt, QRect, QtMsgType, QMetaObject, Q_ARG, pyqtSlot, QTimer
+from PyQt5.QtGui import QScreen
+from auth_dialog import AuthDialog
+from interface import Interface
+from playback import Playback
+from utilities import signal_handler, run_scheduler, load_schedule, SyncNetworkShare
+
+# Custom Qt message handler to log Qt messages (e.g., warnings, errors) to kiosk.log and console
+def qt_message_handler(msg_type, context, msg):
+    log_levels = {
+        QtMsgType.QtDebugMsg: logging.DEBUG,
+        QtMsgType.QtInfoMsg: logging.INFO,
+        QtMsgType.QtWarningMsg: logging.WARNING,
+        QtMsgType.QtCriticalMsg: logging.ERROR,
+        QtMsgType.QtFatalMsg: logging.CRITICAL
+    }
+    logging.log(log_levels.get(msg_type, logging.INFO), f"Qt: {msg}")
+    print(f"Qt: {msg}")
+
+# Set up logging to /home/admin/gui/logs/kiosk.log with detailed timestamps
+logging.basicConfig(
+    filename="/home/admin/gui/logs/kiosk.log",
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s: %(message)s"
+)
+
+# Ensure required directories exist for logs, videos, and icons
+try:
+    os.makedirs("/home/admin/gui/logs", exist_ok=True)
+    os.makedirs("/home/admin/videos", exist_ok=True)
+    os.makedirs("/home/admin/gui/icons", exist_ok=True)
+except Exception as e:
+    logging.error(f"Failed to create directories: {e}")
+    print(f"Error creating directories: {e}")
+    sys.exit(1)
+
+# Set up signal handling for graceful shutdown (SIGINT, SIGTERM)
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
+
+class KioskGUI(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        logging.debug("Initializing KioskGUI")
+        try:
+            # Set window title and fixed size (787x492px to mimic 10" touchscreen)
+            self.setWindowTitle("Media Kiosk")
+            self.setFixedSize(787, 492)
+            self.setStyleSheet("""
+                QMainWindow {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
+                                                stop:0 #2c3e50, stop:1 #34495e);
+                }
+                QLabel {
+                    color: white;
+                }
+            """)
+            # Initialize QStackedWidget for screen navigation
+            self.stack = QStackedWidget()
+            self.setCentralWidget(self.stack)
+            self.source_screens = []
+
+            # Initialize state variables
+            self.input_map = {
+                "Local Files": 2,
+                "Audio": 1,
+                "DVD": 3,
+                "Web": 4
+            }  # Maps source names to input numbers for playback
+            self.input_paths = {}  # Maps input numbers to video file paths (set by source_screen.py)
+            self.input_output_map = {}  # Maps input numbers to output lists (set by OutputDialog)
+            self.active_inputs = {}  # Tracks active playback inputs
+            self.selected_source = None  # Currently selected source
+            self.media_processes = {}  # Tracks mpv subprocesses
+            self.authenticated = False  # Authentication status
+            logging.debug(f"Initialized input_map: {self.input_map}")
+
+            # Initialize playback and interface
+            logging.debug("Initializing Playback")
+            self.playback = Playback(self)
+            logging.debug("Initializing Interface")
+            self.interface = Interface(self)
+            self.stack.addWidget(self.interface.main_widget)
+
+            # Initialize network sync (SyncNetworkShare from utilities.py)
+            self.sync_manager = SyncNetworkShare()
+            self.sync_manager.progress.connect(self.interface.update_sync_status)
+            self.sync_manager.progress.connect(self.update_source_sync_status)
+
+            # Start scheduler thread for daily tasks (uses schedule library)
+            logging.debug("Starting scheduler thread")
+            self.scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+            self.scheduler_thread.start()
+            self.load_and_apply_schedule()
+
+            # Delay AuthDialog display until event loop starts
+            QTimer.singleShot(0, self.show_auth_dialog)
+        except Exception as e:
+            logging.error(f"Initialization failed: {e}")
+            print(f"Initialization failed: {e}")
+            sys.exit(1)
+
+    def show_auth_dialog(self):
+        # Displays AuthDialog (no parent, 245x184px, frameless) for PIN entry
+        try:
+            logging.debug("Creating AuthDialog")
+            dialog = AuthDialog()  # No parent to ensure independent display
+            dialog.setFixedSize(245, 184)
+            dialog.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+            # Center dialog on screen
+            screen = QApplication.primaryScreen().geometry()
+            dialog_rect = QRect(0, 0, 245, 184)
+            dialog_rect.moveCenter(screen.center())
+            dialog.setGeometry(dialog_rect)
+            logging.debug(f"AuthDialog geometry: {dialog_rect.getRect()}")
+            logging.debug(f"AuthDialog visible before show: {dialog.isVisible()}")
+            dialog.setVisible(True)
+            dialog.show()
+            dialog.raise_()
+            dialog.activateWindow()
+            dialog.repaint()
+            logging.debug(f"AuthDialog visible after show: {dialog.isVisible()}")
+            logging.debug("Executing AuthDialog")
+            result = dialog.exec_()
+            logging.debug(f"AuthDialog returned: {result}")
+            if result == QDialog.Accepted:
+                pin = dialog.get_pin()
+                logging.debug(f"PIN entered: {pin}")
+                expected_pin = hashlib.sha256("1234".encode()).hexdigest()
+                logging.debug(f"Expected PIN hash: {expected_pin}")
+                if pin == expected_pin:
+                    self.authenticated = True
+                    logging.debug("Authentication successful, starting network share sync in thread")
+                    sync_thread = threading.Thread(target=self.sync_manager.sync, daemon=True)
+                    sync_thread.start()
+                    logging.debug("Calling show_controls")
+                    self.show_controls()
+                else:
+                    logging.warning("Incorrect PIN entered")
+                    self.show_auth_dialog()
+            else:
+                logging.info("Auth dialog closed without accepting")
+                sys.exit(0)
+        except Exception as e:
+            logging.error(f"Auth dialog error: {e}")
+            print(f"Auth dialog error: {e}")
+            sys.exit(1)
+
+    def show_controls(self):
+        # Shows the main interface (tile buttons) after authentication
+        try:
+            logging.debug("Checking stack and main_widget")
+            logging.debug(f"main_widget exists: {self.interface.main_widget is not None}")
+            logging.debug(f"main_widget visible: {self.interface.main_widget.isVisible() if self.interface.main_widget else False}")
+            logging.debug(f"main_widget geometry: {self.interface.main_widget.geometry().getRect() if self.interface.main_widget else None}")
+            logging.debug(f"main_widget parent: {self.interface.main_widget.parent() if self.interface.main_widget else None}")
+            logging.debug(f"Removing {len(self.source_screens)} source screen widgets")
+            for widget in self.source_screens:
+                try:
+                    widget.disconnect()
+                except Exception as e:
+                    logging.debug(f"No signals to disconnect for widget: {e}")
+                self.stack.removeWidget(widget)
+                widget.deleteLater()
+            self.source_screens.clear()
+            self.interface.main_widget.setVisible(True)
+            self.interface.main_widget.show()
+            self.stack.setCurrentWidget(self.interface.main_widget)
+            self.stack.update()
+            self.update()
+            self.repaint()
+            logging.debug(f"Main window visible: {self.isVisible()}, geometry: {self.geometry().getRect()}")
+            self.show()  # Ensure main window is shown
+        except Exception as e:
+            logging.error(f"Failed to show controls: {e}")
+            print(f"Failed to show controls: {e}")
+            sys.exit(1)
+
+    def show_source_screen(self, source_name):
+        # Displays a SourceScreen (e.g., Local Files) when a source is selected
+        try:
+            from source_screen import SourceScreen
+            source_screen = SourceScreen(self, source_name)
+            self.source_screens.append(source_screen.widget)
+            self.stack.addWidget(source_screen.widget)
+            self.stack.setCurrentWidget(source_screen.widget)
+            logging.debug(f"Displayed source screen for {source_name}")
+        except Exception as e:
+            logging.error(f"Failed to show source screen for {source_name}: {e}")
+            print(f"Failed to show source screen: {e}")
+            sys.exit(1)
+
+    @pyqtSlot(str)
+    def update_source_sync_status(self, status):
+        # Updates sync status on Local Files screen
+        try:
+            current_widget = self.stack.currentWidget()
+            if hasattr(current_widget, 'source_screen') and current_widget.source_screen.source_name == "Local Files":
+                current_widget.source_screen.update_sync_status(status)
+        except Exception as e:
+            logging.error(f"Failed to update source sync status: {e}")
+
+    def load_and_apply_schedule(self):
+        # Loads and applies scheduled playback tasks from /home/admin/gui/schedule.json
+        try:
+            sched = load_schedule()
+            for task in sched:
+                if task["repeat"] == "Daily":
+                    schedule.every().day.at(task["time"]).do(
+                        self.playback.execute_scheduled_task,
+                        input_num=task["input"],
+                        outputs=task["outputs"],
+                        path=task.get("path")
+                    )
+            logging.debug("Schedule loaded and applied")
+        except Exception as e:
+            logging.error(f"Failed to load schedule: {e}")
+            print(f"Failed to load schedule: {e}")
+
+if __name__ == '__main__':
+    try:
+        logging.debug("Starting application")
+        os.environ["QT_QPA_PLATFORM"] = "xcb"
+        app = QApplication(sys.argv)
+        from PyQt5.QtCore import qInstallMessageHandler
+        qInstallMessageHandler(qt_message_handler)
+        kiosk = KioskGUI()
+        logging.debug(f"Main window visible at startup: {kiosk.isVisible()}, geometry: {kiosk.geometry().getRect()}")
+        sys.exit(app.exec_())
+    except Exception as e:
+        logging.error(f"Application failed: {e}")
+        print(f"Application failed: {e}")
+        sys.exit(1)
+
+// gui/interface.py
+# interface.py: Main interface screen for the media kiosk
+#
+# Overview:
+# This file defines the Interface class, responsible for the main interface screen of the
+# media kiosk application on a Raspberry Pi 5 with X11. The interface displays tile buttons
+# (~245x190px) for media sources (e.g., Local Files, Audio, DVD, Web) and a Stop All button.
+# Clicking a source navigates to its SourceScreen (via kiosk.py's show_source_screen).
+#
+# Key Functionality:
+# - Creates a QGridLayout with source buttons and a Stop All button.
+# - Handles button clicks to navigate to SourceScreen (e.g., Local Files).
+# - Updates sync status for Local Files (connected to SyncNetworkShare signals).
+# - Maintains source_states to track playback status.
+#
+# Environment:
+# - Raspberry Pi 5, X11 (QT_QPA_PLATFORM=xcb), PyQt5, 787x492px main window.
+# - Logs: /home/admin/gui/logs/kiosk.log (app logs, including navigation).
+# - Icons: /home/admin/gui/icons (64x64px: audio.png, local_files.png, etc.).
+# - Called by: kiosk.py (initializes Interface).
+#
+# Recent Fixes (as of April 2025):
+# - Fixed AttributeError: 'KioskGUI' object has no attribute 'show_source_screen' (line 49)
+#   by adding show_source_screen to KioskGUI in kiosk.py.
+#
+# Known Considerations:
+# - Ensure icon files exist in /home/admin/gui/icons to avoid warnings.
+# - Button sizes (~245x190px) and layout may need adjustment for touchscreen usability.
+# - Sync status updates rely on SyncNetworkShare signals (utilities.py).
+# - Placeholder code assumed for tile button setup; verify actual implementation.
+#
+# Dependencies:
+# - PyQt5: GUI framework.
+# - Files: kiosk.py (parent), source_screen.py (navigation target).
+
+from PyQt5.QtWidgets import QWidget, QGridLayout, QPushButton
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIcon, QFont
+import logging
+import os
+
+class Interface:
+    def __init__(self, parent):
+        # Initialize Interface with KioskGUI parent
+        self.parent = parent
+        self.main_widget = QWidget()
+        self.source_states = {"Local Files": False, "Audio": False, "DVD": False, "Web": False}
+        self.setup_ui()
+        logging.debug("Interface: Initialized")
+
+    def setup_ui(self):
+        # Sets up the main interface with source buttons and Stop All
+        logging.debug("Interface: Setting up UI")
+        layout = QGridLayout(self.main_widget)
+        sources = ["Local Files", "Audio", "DVD", "Web"]
+        positions = [(0, 0), (0, 1), (1, 0), (1, 1)]
+
+        for source, pos in zip(sources, positions):
+            button = QPushButton(source)
+            button.setFont(QFont("Arial", 16))
+            icon_path = f"/home/admin/gui/icons/{source.lower().replace(' ', '_')}.png"
+            if os.path.exists(icon_path):
+                button.setIcon(QIcon(icon_path))
+                button.setIconSize(Qt.Size(64, 64))
+            button.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #2980b9, stop:1 #3498db);
+                    color: white;
+                    border-radius: 6px;
+                    padding: 10px;
+                }
+                QPushButton:hover {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #6ab7f5, stop:1 #ffffff);
+                }
+            """)
+            button.setFixedSize(245, 190)
+            button.clicked.connect(lambda checked, s=source: self.source_clicked(s))
+            layout.addWidget(button, *pos)
+
+        stop_all_button = QPushButton("Stop All")
+        stop_all_button.setFont(QFont("Arial", 16))
+        if os.path.exists("/home/admin/gui/icons/stop_all.png"):
+            stop_all_button.setIcon(QIcon("/home/admin/gui/icons/stop_all.png"))
+            stop_all_button.setIconSize(Qt.Size(64, 64))
+        stop_all_button.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #c0392b, stop:1 #e74c3c);
+                color: white;
+                border-radius: 6px;
+                padding: 10px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #6ab7f5, stop:1 #ffffff);
+            }
+        """)
+        stop_all_button.clicked.connect(self.parent.playback.stop_all_playback)
+        layout.addWidget(stop_all_button, 2, 0, 1, 2, Qt.AlignCenter)
+        logging.debug("Interface: UI setup completed")
+
+    def source_clicked(self, source_name):
+        # Handles source button clicks, navigating to SourceScreen
+        logging.debug(f"Interface: Source clicked: {source_name}")
+        self.parent.selected_source = source_name
+        self.parent.show_source_screen(source_name)  # Line 49: Calls KioskGUI.show_source_screen
+
+    def update_sync_status(self, status):
+        # Updates sync status display (connected to SyncNetworkShare signals)
+        logging.debug(f"Interface: Updating sync status: {status}")
+        # Placeholder: Add sync status label or indicator if needed
+        pass
+
+// gui/playback.py
+# playback.py: Handles media playback for the media kiosk using mpv
+#
+# Overview:
+# This file defines the Playback class, responsible for starting, stopping, and scheduling
+# media playback in the media kiosk application running on a Raspberry Pi 5 with X11.
+# It uses mpv to play videos from /home/admin/videos on selected HDMI outputs (e.g., HDMI-A-1,
+# HDMI-A-2) based on user selections in the Local Files screen (via source_screen.py).
+#
+# Key Functionality:
+# - toggle_play_pause: Starts or stops playback for a source (e.g., Local Files, input 2).
+# - start_playback: Launches mpv with specified video path and outputs, logs to mpv.log.
+# - stop_input/stop_all_playback: Terminates mpv processes.
+# - execute_scheduled_task: Runs scheduled playback tasks (from schedule.json).
+# - Uses stub_matrix_route (utilities.py) to simulate routing inputs to outputs.
+#
+# Environment:
+# - Raspberry Pi 5, X11 (QT_QPA_PLATFORM=xcb), PyQt5, 787x492px window.
+# - Logs: /home/admin/gui/logs/kiosk.log (app), /home/admin/gui/logs/mpv.log (mpv output).
+# - Videos: /home/admin/videos (local storage).
+# - Outputs: HDMI-A-1, HDMI-A-2 (targeted via --fs-screen=0, adjustable).
+#
+# Recent Fixes (as of April 2025):
+# - Fixed invalid --no-video-title-show (VLC-specific) causing mpv crashes.
+# - Replaced --o/--oerr with --log-file for correct mpv logging.
+# - Added os.path.exists to validate video paths.
+# - Enhanced subprocess error capture to log immediate mpv failures (stdout, stderr).
+# - Added logging for mpv command, PID, and playback status.
+# - Integrated stub_matrix_route for output routing simulation.
+#
+# Known Considerations:
+# - HDMI output (--fs-screen=0) may need adjustment based on xrandr --current output.
+# - Ensure /home/admin/videos files are valid (.mp4, .mkv) and accessible.
+# - MPV must be installed (sudo apt install mpv) and in PATH.
+# - Monitor mpv_err.log for playback issues (e.g., codec errors, display issues).
+# - input_paths and input_output_map must be set by source_screen.py and OutputDialog.
+#
+# Dependencies:
+# - mpv: External binary for media playback.
+# - subprocess: Runs mpv processes.
+# - utilities.py: Provides stub_matrix_route for output routing.
+
+import os
+import subprocess
+import logging
+from utilities import stub_matrix_route
+
+class Playback:
+    def __init__(self, parent):
+        # Initialize Playback with KioskGUI parent for state access
+        self.parent = parent
+        logging.debug("Initializing Playback")
+
+    def toggle_play_pause(self, source_name):
+        # Starts or stops playback for a source (e.g., Local Files)
+        try:
+            logging.debug(f"Attempting toggle play/pause for source: {source_name}")
+            input_num = self.parent.input_map.get(source_name, 2)  # Default to 2 for Local Files
+            outputs = self.parent.input_output_map.get(input_num, [])
+            path = self.parent.input_paths.get(input_num, "")
+            logging.debug(f"Input num: {input_num}, Outputs: {outputs}, Path: {path}")
+            
+            if not os.path.exists(path):
+                logging.error(f"Video file does not exist: {path}")
+                return
+            
+            if not outputs:
+                logging.warning(f"No outputs specified for input {input_num}")
+                return
+            
+            if self.parent.active_inputs.get(input_num, False):
+                self.stop_input(input_num)
+            else:
+                # Route input to outputs
+                if stub_matrix_route(input_num, outputs):
+                    self.start_playback(input_num, path, outputs)
+                else:
+                    logging.error(f"Failed to route input {input_num} to outputs {outputs}")
+        except Exception as e:
+            logging.error(f"Toggle play/pause failed for {source_name}: {e}")
+            raise
+
+    def start_playback(self, input_num, path, outputs):
+        # Starts mpv playback for a video on specified outputs
+        try:
+            logging.debug(f"Starting playback for input {input_num}, path {path}, outputs {outputs}")
+            cmd = [
+                "mpv",
+                "--fs",
+                "--vo=gpu",
+                "--hwdec=no",
+                "--fs-screen=0",  # Target primary HDMI output (adjust if needed)
+                path,
+                "--log-file=/home/admin/gui/logs/mpv.log"
+            ]
+            logging.debug(f"Executing MPV command: {' '.join(cmd)}")
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True
+            )
+            # Check if process started
+            if process.poll() is not None:
+                stdout, stderr = process.communicate()
+                logging.error(f"MPV failed immediately: stdout={stdout}, stderr={stderr}")
+                raise RuntimeError(f"MPV process exited: {stderr}")
+            self.parent.media_processes[input_num] = process
+            self.parent.active_inputs[input_num] = True
+            self.parent.interface.source_states[self.parent.selected_source] = True
+            logging.debug(f"Started playback for input {input_num} on outputs {outputs}, PID: {process.pid}")
+        except Exception as e:
+            logging.error(f"Start playback failed for input {input_num}: {e}")
+            raise
+
+    def stop_input(self, input_num):
+        # Stops playback for a specific input
+        try:
+            logging.debug(f"Stopping playback for input {input_num}")
+            if input_num in self.parent.media_processes:
+                process = self.parent.media_processes[input_num]
+                process.terminate()
+                process.wait(timeout=5)
+                del self.parent.media_processes[input_num]
+            self.parent.active_inputs[input_num] = False
+            self.parent.interface.source_states[self.parent.selected_source] = False
+            logging.debug(f"Stopped playback for input {input_num}")
+        except Exception as e:
+            logging.error(f"Stop playback failed for input {input_num}: {e}")
+            raise
+
+    def stop_all_playback(self):
+        # Stops all active playback processes
+        try:
+            logging.debug("Stopping all playback")
+            for input_num in list(self.parent.media_processes.keys()):
+                self.stop_input(input_num)
+            logging.debug("Stopped all playback")
+        except Exception as e:
+            logging.error(f"Stop all playback failed: {e}")
+            raise
+
+    def execute_scheduled_task(self, input_num, outputs, path):
+        # Executes a scheduled playback task
+        try:
+            logging.debug(f"Executing scheduled task for input {input_num}, outputs {outputs}")
+            if not os.path.exists(path):
+                logging.error(f"Scheduled video file does not exist: {path}")
+                return
+            if stub_matrix_route(input_num, outputs):
+                self.start_playback(input_num, path, outputs)
+                logging.debug(f"Scheduled playback executed for input {input_num} on outputs {outputs}")
+            else:
+                logging.error(f"Scheduled routing failed for input {input_num} to outputs {outputs}")
+        except Exception as e:
+            logging.error(f"Scheduled task failed for input {input_num}: {e}")
+            raise
+
+// gui/schedule_dialog.py
+# schedule_dialog.py: Dialog for scheduling playback tasks in the media kiosk
+#
+# Overview:
+# This file defines the ScheduleDialog class, a PyQt5 QDialog for scheduling media playback
+# tasks in the media kiosk application on a Raspberry Pi 5 with X11. The dialog (assumed
+# 300x300px, frameless) allows users to set a time, input, outputs, and video path for daily
+# playback tasks, saved to /home/admin/gui/schedule.json (loaded by kiosk.py).
+#
+# Key Functionality:
+# - Provides fields for time (e.g., HH:MM), input number, outputs, and video path.
+# - Saves schedule data to schedule.json on confirmation.
+# - Uses Qt.FramelessWindowHint for no title bar.
+#
+# Environment:
+# - Raspberry Pi 5, X11 (QT_QPA_PLATFORM=xcb), PyQt5, 787x492px main window.
+# - Logs: /home/admin/gui/logs/kiosk.log (app logs, including scheduling).
+# - Schedule file: /home/admin/gui/schedule.json.
+# - Called by: source_screen.py (Schedule button).
+#
+# Recent Fixes (as of April 2025):
+# - None (placeholder file based on described functionality).
+# - Assumed to work with Local Files screen and kiosk.py’s load_and_apply_schedule.
+#
+# Known Considerations:
+# - Placeholder code: Actual implementation may differ. Verify with provided schedule_dialog.py.
+# - Schedule file format and storage location (/home/admin/gui/schedule.json) need confirmation.
+# - Ensure time input is validated (e.g., 24-hour format).
+# - Dialog size (300x300px) is assumed; adjust for touchscreen usability.
+#
+# Dependencies:
+# - PyQt5: GUI framework.
+# - json: For schedule file handling.
+# - Called by: source_screen.py.
+# - Used by: kiosk.py (load_and_apply_schedule).
+
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QPushButton, QLabel
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont
+import logging
+import json
+import os
+
+class ScheduleDialog(QDialog):
+    def __init__(self, parent, input_num):
+        # Initialize ScheduleDialog with KioskGUI parent and input number
+        super().__init__(parent)
+        self.input_num = input_num
+        self.setWindowTitle("Schedule Playback")
+        self.setFixedSize(300, 300)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setup_ui()
+        logging.debug(f"ScheduleDialog: Initialized for input {input_num}")
+
+    def setup_ui(self):
+        # Sets up the dialog UI: time, outputs, path inputs, and Save button
+        logging.debug("ScheduleDialog: Setting up UI")
+        layout = QVBoxLayout(self)
+        
+        time_label = QLabel("Time (HH:MM):")
+        time_label.setFont(QFont("Arial", 16))
+        time_label.setStyleSheet("color: white;")
+        layout.addWidget(time_label)
+        
+        self.time_input = QLineEdit()
+        self.time_input.setFont(QFont("Arial", 16))
+        self.time_input.setPlaceholderText("e.g., 14:30")
+        layout.addWidget(self.time_input)
+        
+        outputs_label = QLabel("Outputs (comma-separated, e.g., 1,3):")
+        outputs_label.setFont(QFont("Arial", 16))
+        outputs_label.setStyleSheet("color: white;")
+        layout.addWidget(outputs_label)
+        
+        self.outputs_input = QLineEdit()
+        self.outputs_input.setFont(QFont("Arial", 16))
+        layout.addWidget(self.outputs_input)
+        
+        path_label = QLabel("Video Path:")
+        path_label.setFont(QFont("Arial", 16))
+        path_label.setStyleSheet("color: white;")
+        layout.addWidget(path_label)
+        
+        self.path_input = QLineEdit()
+        self.path_input.setFont(QFont("Arial", 16))
+        layout.addWidget(self.path_input)
+        
+        save_button = QPushButton("Save")
+        save_button.setFont(QFont("Arial", 16))
+        save_button.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #27ae60, stop:1 #2ecc71);
+                color: white;
+                border-radius: 4px;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #6ab7f5, stop:1 #ffffff);
+            }
+        """)
+        save_button.clicked.connect(self.save_schedule)
+        layout.addWidget(save_button)
+        
+        self.setStyleSheet("""
+            QDialog {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #2c3e50, stop:1 #34495e);
+            }
+        """)
+        logging.debug("ScheduleDialog: UI setup completed")
+
+    def save_schedule(self):
+        # Saves the schedule task to schedule.json
+        try:
+            time = self.time_input.text()
+            outputs = [int(o) for o in self.outputs_input.text().split(",") if o.strip()]
+            path = self.path_input.text()
+            if not time or not outputs or not path:
+                logging.warning("ScheduleDialog: Incomplete input")
+                return
+            
+            schedule_entry = {
+                "input": self.input_num,
+                "time": time,
+                "outputs": outputs,
+                "path": path,
+                "repeat": "Daily"
+            }
+            
+            schedule_file = "/home/admin/gui/schedule.json"
+            try:
+                with open(schedule_file, "r") as f:
+                    schedule_data = json.load(f)
+            except FileNotFoundError:
+                schedule_data = []
+            
+            schedule_data.append(schedule_entry)
+            with open(schedule_file, "w") as f:
+                json.dump(schedule_data, f, indent=4)
+            
+            logging.debug(f"ScheduleDialog: Saved schedule entry: {schedule_entry}")
+            self.accept()
+        except Exception as e:
+            logging.error(f"ScheduleDialog: Failed to save schedule: {e}")
+            self.reject()
+
+// gui/source_screen.py
+# source_screen.py: Source-specific screen for the media kiosk (e.g., Local Files)
+#
+# Overview:
+# This file defines the SourceScreen class, a PyQt5 QWidget for displaying source-specific
+# interfaces in the media kiosk application on a Raspberry Pi 5 with X11. For Local Files,
+# it shows a screen (787x492px) with a 30pt title, 20pt fonts, 2/3 width file listbox,
+# 1/3 width TV outputs list (yellow #f1c40f text), and horizontal Play/Stop/Schedule buttons
+# (61x61px). It handles file selection, output selection (via OutputDialog), playback, and
+# scheduling.
+#
+# Key Functionality:
+# - Displays a file listbox for /home/admin/videos (Local Files).
+# - Shows selected TV outputs (updated via OutputDialog).
+# - Provides Play, Stop, Schedule, and Select Outputs buttons.
+# - Updates KioskGUI.input_paths and input_output_map based on selections.
+# - Supports sync status updates for Local Files.
+#
+# Environment:
+# - Raspberry Pi 5, X11 (QT_QPA_PLATFORM=xcb), PyQt5, 787x492px main window.
+# - Logs: /home/admin/gui/logs/kiosk.log (app logs, including file selection, playback).
+# - Videos: /home/admin/videos (local storage).
+# - Icons: /home/admin/gui/icons (61x61px: play.png, stop.png, etc.).
+# - Called by: kiosk.py (show_source_screen).
+#
+# Recent Fixes (as of April 2025):
+# - None (placeholder file based on described functionality).
+# - Assumed to work with fixed show_source_screen in kiosk.py.
+#
+# Known Considerations:
+# - Placeholder code: Actual implementation may differ. Verify with provided source_screen.py.
+# - File listbox should only show supported formats (.mp4, .mkv).
+# - TV outputs list (yellow text) needs correct mapping to HDMI-A-1/HDMI-A-2.
+# - Ensure Select Outputs button aligns with file listbox bottom.
+# - Sync status updates rely on SyncNetworkShare signals (utilities.py).
+#
+# Dependencies:
+# - PyQt5: GUI framework.
+# - Files: kiosk.py (parent), output_dialog.py (output selection), schedule_dialog.py (scheduling).
+# - os: For file listing.
+
+from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QListWidget, QLabel, QPushButton
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont, QIcon
+import logging
+import os
+
+class SourceScreen:
+    def __init__(self, parent, source_name):
+        # Initialize SourceScreen with KioskGUI parent and source name
+        self.parent = parent
+        self.source_name = source_name
+        self.widget = QWidget()
+        self.setup_ui()
+        logging.debug(f"SourceScreen: Initialized for {source_name}")
+
+    def setup_ui(self):
+        # Sets up the Local Files screen UI: title, file list, outputs, buttons
+        logging.debug(f"SourceScreen: Setting up UI for {self.source_name}")
+        layout = QHBoxLayout(self.widget)
+        
+        # Left side: File listbox (2/3 width)
+        left_layout = QVBoxLayout()
+        title = QLabel(self.source_name)
+        title.setFont(QFont("Arial", 30))
+        title.setStyleSheet("color: white;")
+        left_layout.addWidget(title)
+        
+        self.file_list = QListWidget()
+        self.file_list.setFont(QFont("Arial", 20))
+        self.file_list.setStyleSheet("color: white; background: #34495e;")
+        self.file_list.itemClicked.connect(self.file_selected)
+        left_layout.addWidget(self.file_list)
+        
+        # Populate file list for Local Files
+        if self.source_name == "Local Files":
+            video_dir = "/home/admin/videos"
+            for file in os.listdir(video_dir):
+                if file.endswith((".mp4", ".mkv")):
+                    self.file_list.addItem(file)
+        
+        layout.addLayout(left_layout, 2)
+        
+        # Right side: TV outputs and buttons (1/3 width)
+        right_layout = QVBoxLayout()
+        outputs_label = QLabel("Selected Outputs:")
+        outputs_label.setFont(QFont("Arial", 20))
+        outputs_label.setStyleSheet("color: #f1c40f;")
+        right_layout.addWidget(outputs_label)
+        
+        self.outputs_list = QListWidget()
+        self.outputs_list.setFont(QFont("Arial", 20))
+        self.outputs_list.setStyleSheet("color: #f1c40f; background: #34495e;")
+        right_layout.addWidget(self.outputs_list)
+        
+        buttons_layout = QHBoxLayout()
+        for action, icon in [("Play", "play.png"), ("Stop", "stop.png"), ("Schedule", "schedule.png")]:
+            button = QPushButton()
+            button.setFixedSize(61, 61)
+            icon_path = f"/home/admin/gui/icons/{icon}"
+            if os.path.exists(icon_path):
+                button.setIcon(QIcon(icon_path))
+                button.setIconSize(Qt.Size(61, 61))
+            button.setStyleSheet("""
+                QPushButton {
+                    background: #34495e;
+                    border-radius: 4px;
+                }
+                QPushButton:hover {
+                    background: #6ab7f5;
+                }
+            """)
+            if action == "Play":
+                button.clicked.connect(lambda: self.parent.playback.toggle_play_pause(self.source_name))
+            elif action == "Stop":
+                button.clicked.connect(lambda: self.parent.playback.stop_input(2))
+            elif action == "Schedule":
+                button.clicked.connect(self.open_schedule_dialog)
+            buttons_layout.addWidget(button)
+        
+        right_layout.addLayout(buttons_layout)
+        
+        select_outputs_button = QPushButton("Select Outputs")
+        select_outputs_button.setFont(QFont("Arial", 16))
+        select_outputs_button.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #27ae60, stop:1 #2ecc71);
+                color: white;
+                border-radius: 4px;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #6ab7f5, stop:1 #ffffff);
+            }
+        """)
+        select_outputs_button.clicked.connect(self.open_output_dialog)
+        right_layout.addWidget(select_outputs_button, alignment=Qt.AlignBottom)
+        
+        layout.addLayout(right_layout, 1)
+        logging.debug("SourceScreen: UI setup completed")
+
+    def file_selected(self, item):
+        # Updates input_paths when a file is selected
+        if self.source_name == "Local Files":
+            file_path = os.path.join("/home/admin/videos", item.text())
+            self.parent.input_paths[2] = file_path
+            logging.debug(f"SourceScreen: Selected file: {file_path}")
+
+    def open_output_dialog(self):
+        # Opens OutputDialog to select TV outputs
+        from output_dialog import OutputDialog
+        dialog = OutputDialog(self.parent, 2)  # Input 2 for Local Files
+        if dialog.exec_():
+            outputs = self.parent.input_output_map.get(2, [])
+            self.outputs_list.clear()
+            for output in outputs:
+                self.outputs_list.addItem(f"Output {output}")
+            logging.debug(f"SourceScreen: Updated outputs: {outputs}")
+
+    def open_schedule_dialog(self):
+        # Opens ScheduleDialog to schedule playback
+        from schedule_dialog import ScheduleDialog
+        dialog = ScheduleDialog(self.parent, 2)  # Input 2 for Local Files
+        dialog.exec_()
+        logging.debug("SourceScreen: Schedule dialog closed")
+
+    def update_sync_status(self, status):
+        # Updates sync status for Local Files
+        logging.debug(f"SourceScreen: Updating sync status: {status}")
+        # Placeholder: Add sync status label if needed
+        pass
+
+// gui/utilities.py
+# utilities.py: Utility functions for the media kiosk
+#
+# Overview:
+# This file provides utility functions for the media kiosk application on a Raspberry Pi 5
+# with X11, including signal handling, scheduling, network share syncing, and output routing.
+# It supports the main application (kiosk.py) by managing background tasks and system integration.
+#
+# Key Functionality:
+# - signal_handler: Gracefully shuts down the application on SIGINT/SIGTERM.
+# - run_scheduler: Runs the schedule loop for daily playback tasks.
+# - load_schedule: Loads schedule.json for task scheduling.
+# - SyncNetworkShare: Syncs files from /mnt/share to /home/admin/videos.
+# - stub_matrix_route: Simulates routing inputs to outputs (placeholder for hardware integration).
+#
+# Environment:
+# - Raspberry Pi 5, X11 (QT_QPA_PLATFORM=xcb), PyQt5, 787x492px main window.
+# - Logs: /home/admin/gui/logs/kiosk.log (app logs, including sync progress).
+# - Videos: /home/admin/videos (local), /mnt/share (network share).
+# - Schedule file: /home/admin/gui/schedule.json.
+#
+# Recent Fixes (as of April 2025):
+# - Fixed NameError for schedule by adding import.
+# - Added stub_matrix_route for playback routing simulation.
+# - Made SyncNetworkShare thread-safe with progress signals.
+#
+# Known Considerations:
+# - Network share sync (~45 seconds for one file) may need optimization (e.g., async copying).
+# - stub_matrix_route is a placeholder; replace with actual hardware routing if needed.
+# - Ensure /mnt/share is mounted before sync (sudo mount -t cifs).
+# - Schedule file format (schedule.json) needs validation.
+#
+# Dependencies:
+# - PyQt5: For Qt signals in SyncNetworkShare.
+# - schedule: For task scheduling.
+# - json, os, shutil: For file operations.
+# - threading, time: For sync and scheduling.
+
+import sys
+import os
+import signal
+import logging
+import json
+import shutil
+import time
+import schedule
+import threading
+from PyQt5.QtCore import QObject, pyqtSignal
+
+def signal_handler(sig, frame):
+    # Handles SIGINT/SIGTERM for graceful shutdown
+    logging.info(f"Received signal {sig}, shutting down")
+    sys.exit(0)
+
+def run_scheduler():
+    # Runs the schedule loop for daily playback tasks
+    logging.debug("Starting scheduler")
+    while True:
+        try:
+            schedule.run_pending()
+            time.sleep(1)
+        except Exception as e:
+            logging.error(f"Scheduler error: {e}")
+
+def load_schedule():
+    # Loads schedule tasks from schedule.json
+    schedule_file = "/home/admin/gui/schedule.json"
+    try:
+        if os.path.exists(schedule_file):
+            with open(schedule_file, "r") as f:
+                return json.load(f)
+        return []
+    except Exception as e:
+        logging.error(f"Failed to load schedule: {e}")
+        return []
+
+class SyncNetworkShare(QObject):
+    progress = pyqtSignal(str)  # Signal for sync progress updates
+
+    def __init__(self):
+        super().__init__()
+        logging.debug("Initializing SyncNetworkShare")
+
+    def sync(self):
+        # Syncs files from /mnt/share to /home/admin/videos
+        try:
+            source_dir = "/mnt/share"
+            dest_dir = "/home/admin/videos"
+            if not os.path.exists(source_dir):
+                logging.error(f"Source directory {source_dir} does not exist")
+                self.progress.emit("Sync failed: Source not mounted")
+                return
+            
+            files = [f for f in os.listdir(source_dir) if f.endswith((".mp4", ".mkv"))]
+            total = len(files)
+            if total == 0:
+                logging.info("No files to sync")
+                self.progress.emit("No files to sync")
+                return
+            
+            for i, file in enumerate(files):
+                src_path = os.path.join(source_dir, file)
+                dst_path = os.path.join(dest_dir, file)
+                try:
+                    shutil.copy2(src_path, dst_path)
+                    progress = f"Sync progress: {(i + 1) / total * 100:.0f}%"
+                    logging.debug(progress)
+                    self.progress.emit(progress)
+                    time.sleep(0.1)  # Simulate delay for testing
+                except Exception as e:
+                    logging.error(f"Failed to sync {file}: {e}")
+                    self.progress.emit(f"Failed to sync {file}")
+            
+            logging.info("Sync completed")
+            self.progress.emit("Sync completed")
+        except Exception as e:
+            logging.error(f"Sync failed: {e}")
+            self.progress.emit("Sync failed")
+
+def stub_matrix_route(input_num, outputs):
+    # Simulates routing an input to outputs (placeholder)
+    try:
+        logging.debug(f"Routing input {input_num} to outputs {outputs}")
+        return True  # Simulate successful routing
+    except Exception as e:
+        logging.error(f"Routing failed for input {input_num} to outputs {outputs}: {e}")
+        return False
+
+// autostart.sh
+#!/bin/bash
+# Trap termination signals to clean up processes
+cleanup() {
+    echo "Cleaning up processes..."
+    pkill -f "vlc"
+    pkill -f "python3 /home/admin/flask_server.py"
+    pkill -f "python3 /home/admin/kiosk.py"
+    pkill -f "python3 /home/admin/cleanup_videos.py"
+    exit 0
+}
+trap cleanup SIGINT SIGTERM
+
+# Fix runtime directory permissions
+echo "Fixing runtime directory permissions..."
+chmod 0700 /run/user/1000
+
+# Mount network share
+echo "Mounting network share..."
+sudo mount -a
+
+# Mount USB if present
+echo "Checking for USB..."
+if [ -b /dev/sda1 ]; then
+    sudo mkdir -p /mnt/usb
+    sudo mount /dev/sda1 /mnt/usb
+fi
+
+# Wait for network and Wayland
+echo "Waiting for network and Wayland..."
+sleep 10
+
+# Kill existing Flask instances
+echo "Killing existing Flask instances..."
+pkill -f "python3 /home/admin/flask_server.py"
+
+# Start Flask server
+echo "Starting Flask server..."
+python3 /home/admin/flask_server.py &
+
+# Start cleanup scheduler
+echo "Starting video cleanup scheduler..."
+python3 /home/admin/cleanup_videos.py &
+
+# Start kiosk GUI
+echo "Starting kiosk GUI..."
+python3 /home/admin/kiosk.py &
+
+# Keep script running to handle trap
+wait
+
+// flask_server.py
+from flask import Flask, request, render_template_string, redirect, url_for
+from werkzeug.utils import secure_filename
+import os
+import subprocess
+
+app = Flask(__name__)
+UPLOAD_FOLDER = '/home/pi/uploads'
+ALLOWED_EXTENSIONS = {'mp4', 'mkv'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+def check_auth(username, password):
+    return username == 'admin' and password == 'password'
+
+@app.route('/')
+def index():
+    auth = request.authorization
+    if not auth or not check_auth(auth.username, auth.password):
+        return 'Unauthorized', 401, {'WWW-Authenticate': 'Basic realm="Login Required"'}
+    return render_template_string('''
+        <h1>Stream to Media Kiosk</h1>
+        <form method="post" action="/upload" enctype="multipart/form-data">
+            <p>Upload Video File (.mp4, .mkv):</p>
+            <input type="file" name="file">
+            <input type="submit" value="Upload">
+        </form>
+        <form method="post" action="/stream">
+            <p>Stream URL (e.g., YouTube):</p>
+            <input type="text" name="url">
+            <input type="submit" value="Stream">
+        </form>
+    ''')
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    auth = request.authorization
+    if not auth or not check_auth(auth.username, auth.password):
+        return 'Unauthorized', 401, {'WWW-Authenticate': 'Basic realm="Login Required"'}
+    if 'file' not in request.files:
+        return 'No file part', 400
+    file = request.files['file']
+    if file.filename == '':
+        return 'No selected file', 400
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(file_path)
+        subprocess.run(["pkill", "-f", "vlc.*uploads"])
+        try:
+            subprocess.Popen(["vlc", "--fullscreen", "--no-video-title-show", file_path])
+            subprocess.run(["wlrctl", "window", "vlc", "move", "output:HDMI-A-1"])
+            return redirect(url_for('index'))
+        except subprocess.CalledProcessError:
+            return 'Failed to play uploaded file', 500
+    return 'Invalid file type', 400
+
+@app.route('/stream', methods=['POST'])
+def stream_url():
+    auth = request.authorization
+    if not auth or not check_auth(auth.username, auth.password):
+        return 'Unauthorized', 401, {'WWW-Authenticate': 'Basic realm="Login Required"'}
+    url = request.form.get('url')
+    if url:
+        subprocess.run(["pkill", "-f", "vlc.*http"])
+        try:
+            stream_url = subprocess.check_output(["yt-dlp", "-g", url]).decode().strip()
+            subprocess.Popen(["vlc", "--fullscreen", "--no-video-title-show", stream_url])
+            subprocess.run(["wlrctl", "window", "vlc", "move", "output:HDMI-A-1"])
+            return redirect(url_for('index'))
+        except subprocess.CalledProcessError:
+            return 'Failed to stream URL', 500
+    return 'No URL provided', 400
+
+if __name__ == '__main__':
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)
+
