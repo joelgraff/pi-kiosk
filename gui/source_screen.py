@@ -1,26 +1,19 @@
 # source_screen.py: Source-specific screen for the media kiosk (e.g., Local Files)
 #
 # Overview:
-# This file defines the SourceScreen and OutputDialog classes for the media kiosk application
-# running on a Raspberry Pi 5 with X11. The SourceScreen class is a PyQt5 QWidget for displaying
+# This file defines the SourceScreen class for the media kiosk application running on a
+# Raspberry Pi 5 with X11. The SourceScreen class is a PyQt5 QWidget for displaying
 # source-specific interfaces (e.g., Local Files, 787x492px) with a 28pt title, 20pt fonts,
-# 1/2 width file listbox (300px height), 1/2 width TV outputs list (150px height, vivid yellow
-# #ffc107 text), and vertical Play/Stop/Schedule buttons (120x120px). Status messages span
-# the full width at the bottom in a horizontal layout. The OutputDialog class is a PyQt5 QDialog
-# (245x184px, frameless) for selecting TV outputs (Fellowship 1, Fellowship 2, Nursery).
+# 1/2 width file listbox (300px height), 1/2 width TV outputs toggle buttons (200x60px, vivid
+# yellow #ffc107 text), and horizontal Play/Stop/Schedule buttons (128x128px, icons only).
+# Sync/playback status span the full width at the bottom in a horizontal layout.
 #
 # Key Functionality:
-# - SourceScreen:
-#   - Displays a file listbox (300px height) for /home/admin/videos (Local Files).
-#   - Shows selected TV outputs (150px height), with Select Outputs button (200x60px) nearby.
-#   - Places sync and playback status in a horizontal layout at the bottom (full width).
-#   - Provides Play, Stop, Schedule buttons (120x120px) with icons and text.
-#   - Updates KioskGUI.input_paths and input_output_map based on selections.
-# - OutputDialog:
-#   - Displays toggleable buttons for Fellowship 1 (output 1), Fellowship 2 (output 2), and
-#     Nursery (output 3).
-#   - Styles buttons: blue for current input, red for other active inputs, gray for unassigned.
-#   - Updates KioskGUI.input_output_map when outputs are toggled.
+# - Displays a file listbox (300px height) for /home/admin/videos (Local Files).
+# - Shows toggle buttons for selecting TV outputs (Fellowship 1, Fellowship 2, Nursery).
+# - Places sync and playback status in a horizontal layout at the bottom (full width).
+# - Provides Play, Stop, Schedule buttons (128x128px, icons only).
+# - Updates KioskGUI.input_paths and input_output_map based on selections.
 #
 # Environment:
 # - Raspberry Pi 5, X11 (QT_QPA_PLATFORM=xcb), PyQt5, 787x492px main window.
@@ -31,34 +24,31 @@
 #
 # Integration Notes:
 # - SourceScreen is instantiated by KioskGUI.show_source_screen for source navigation.
-# - OutputDialog is opened by SourceScreen.open_output_dialog for Local Files (input 2).
 # - Default to Fellowship 1 (output 1) if no outputs selected (implement in playback.py).
 #
 # Recent Changes (as of May 2025):
-# - Merged OutputDialog class from output_dialog.py.
-# - Revamped UI: 120x120px buttons, 28pt/20pt fonts, 1/2 vs. 1/2 layout, vibrant colors.
-# - Added prominent sync/playback status in horizontal layout at bottom (full width).
-# - Fixed alignment: Shortened file list (300px), moved Select Outputs near outputs list,
-#   fixed button overlap, added icon fallbacks.
+# - Revamped UI: 128x128px icon-only buttons, 28pt/20pt fonts, 1/2 vs. 1/2 layout.
+# - Added sync/playback status in horizontal layout at bottom (full width).
+# - Replaced Select Outputs button with toggle buttons in outputs list.
+# - Fixed alignment: Shortened file list (300px), horizontal buttons, removed text.
 # - Fixed AttributeError: Changed self.setStyleSheet to self.widget.setStyleSheet.
-# - Fixed AttributeError: Changed self.style() to self.widget.style() for Qt icon fallbacks.
-# - Fixed file list: Made extension matching case-insensitive, added directory logging.
-# - Increased Select Outputs to 200x60px, buttons to 120x120px with 25px spacing.
+# - Fixed AttributeError: Changed self.style() to self.widget.style() for Qt icons.
+# - Fixed file list: Case-insensitive extensions, added logging.
+# - Removed gradient backgrounds, used solid #2a3b5e.
+# - Buttons now 128x128px, horizontal layout, 20px spacing.
 #
 # Known Considerations:
-# - File listbox shows only .mp4/.mkv files (case-insensitive); verify /home/admin/videos accessibility.
+# - File listbox shows only .mp4/.mkv files (case-insensitive); verify /home/admin/videos.
 # - TV outputs map to Fellowship 1 (1), Fellowship 2 (2), Nursery (3); align with HDMI outputs.
-# - Dialog size (245x184px) may need increase (e.g., 300x240px) in future phases.
 # - Icons must be 100x100px; falls back to Qt icons if missing; ensure pause.png exists.
-# - Monitor kiosk.log for UI interaction issues (e.g., touch accuracy, icon loading, file listing).
+# - Monitor kiosk.log for UI interaction issues (e.g., touch accuracy, file listing).
 #
 # Dependencies:
 # - PyQt5: GUI framework.
 # - Files: kiosk.py (parent), schedule_dialog.py (scheduling), utilities.py (list_files, schedule).
 # - os: For file listing.
-# - Note: list_files and save_schedule from utilities.py are used by OutputDialog, not SourceScreen.
 
-from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QListWidget, QLabel, QPushButton, QDialog, QStyle
+from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QListWidget, QLabel, QPushButton, QStyle
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QIcon
 from schedule_dialog import ScheduleDialog
@@ -66,106 +56,12 @@ from utilities import list_files, load_schedule, save_schedule
 import logging
 import os
 
-class OutputDialog(QDialog):
-    def __init__(self, parent, input_num, input_output_map, active_inputs):
-        super().__init__(parent)
-        self.input_num = input_num
-        self.input_output_map = input_output_map
-        self.active_inputs = active_inputs
-        self.setWindowTitle("Select TV Outputs")
-        self.setFixedSize(245, 184)
-        self.setWindowFlags(Qt.FramelessWindowHint)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(10)
-        
-        self.buttons = {
-            "Fellowship 1": QPushButton("Fellowship 1"),
-            "Fellowship 2": QPushButton("Fellowship 2"),
-            "Nursery": QPushButton("Nursery")
-        }
-        for name, button in self.buttons.items():
-            button.setFont(QFont("Arial", 16))
-            button.setCheckable(True)
-            button.setFixedHeight(40)
-            output_idx = {"Fellowship 1": 1, "Fellowship 2": 2, "Nursery": 3}[name]
-            is_current = input_num in input_output_map and output_idx in input_output_map.get(input_num, [])
-            is_other = any(other_input != input_num and output_idx in input_output_map.get(other_input, []) and active_inputs.get(other_input, False) for other_input in input_output_map)
-            self.update_button_style(name, is_current, is_other)
-            button.clicked.connect(lambda checked, n=name: self.update_output(n, checked))
-            layout.addWidget(button)
-        
-        layout.addStretch()
-        
-        done_button = QPushButton("Done")
-        done_button.setFont(QFont("Arial", 16))
-        done_button.clicked.connect(self.accept)
-        done_button.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #27ae60, stop:1 #2ecc71);
-                color: white;
-                border-radius: 6px;
-                padding: 8px;
-            }
-        """)
-        layout.addWidget(done_button)
-
-    def update_button_style(self, name, is_current, is_other):
-        button = self.buttons[name]
-        if is_current:
-            button.setText(f"{name} (This Input)")
-            button.setStyleSheet("""
-                QPushButton {
-                    background: #1f618d;
-                    color: white;
-                    border-radius: 6px;
-                    padding: 8px;
-                }
-            """)
-        elif is_other:
-            button.setText(f"{name} (Other Input)")
-            button.setStyleSheet("""
-                QPushButton {
-                    background: #c0392b;
-                    color: white;
-                    border-radius: 6px;
-                    padding: 8px;
-                }
-            """)
-        else:
-            button.setText(name)
-            button.setStyleSheet("""
-                QPushButton {
-                    background: #7f8c8d;
-                    color: white;
-                    border-radius: 6px;
-                    padding: 8px;
-                }
-            """)
-        button.setChecked(is_current or is_other)
-
-    def update_output(self, tv_name, checked):
-        output_map = {"Fellowship 1": 1, "Fellowship 2": 2, "Nursery": 3}
-        output_idx = output_map[tv_name]
-        if checked:
-            if self.input_num not in self.input_output_map:
-                self.input_output_map[self.input_num] = []
-            if output_idx not in self.input_output_map[self.input_num]:
-                self.input_output_map[self.input_num].append(output_idx)
-        else:
-            if self.input_num in self.input_output_map and output_idx in self.input_output_map[self.input_num]:
-                self.input_output_map[self.input_num].remove(output_idx)
-                if not self.input_output_map[self.input_num]:
-                    del self.input_output_map[self.input_num]
-        is_current = self.input_num in self.input_output_map and output_idx in self.input_output_map.get(input_num, [])
-        is_other = any(other_input != self.input_num and output_idx in input_output_map.get(other_input, []) and self.active_inputs.get(other_input, False) for other_input in input_output_map)
-        self.update_button_style(tv_name, is_current, is_other)
-
 class SourceScreen:
     def __init__(self, parent, source_name):
         self.parent = parent
         self.source_name = source_name
         self.widget = QWidget()
+        self.output_buttons = {}  # Store output toggle buttons
         self.setup_ui()
         logging.debug(f"SourceScreen: Initialized for {source_name}")
 
@@ -183,7 +79,7 @@ class SourceScreen:
         left_layout = QVBoxLayout()
         title = QLabel(self.source_name)
         title.setFont(QFont("Arial", 28, QFont.Bold))
-        title.setStyleSheet("color: #ffffff;")
+        title.setStyleSheet("color: #ffffff; background: transparent;")
         left_layout.addWidget(title)
         
         self.file_list = QListWidget()
@@ -214,6 +110,7 @@ class SourceScreen:
                     for file in files:
                         if file.lower().endswith((".mp4", ".mkv")):
                             self.file_list.addItem(file)
+                    logging.debug(f"Loaded video files: {[item.text() for item in self.file_list.findItems('*', Qt.MatchWildcard)]}")
                 except Exception as e:
                     logging.error(f"Failed to list files in {video_dir}: {e}")
         
@@ -221,48 +118,42 @@ class SourceScreen:
         
         # Right side: TV outputs and buttons (1/2 width)
         right_layout = QVBoxLayout()
-        outputs_label = QLabel("Selected Outputs:")
+        outputs_label = QLabel("Select Outputs:")
         outputs_label.setFont(QFont("Arial", 20, QFont.Bold))
-        outputs_label.setStyleSheet("color: #ffc107;")
+        outputs_label.setStyleSheet("color: #ffc107; background: transparent;")
         right_layout.addWidget(outputs_label)
         
-        self.outputs_list = QListWidget()
-        self.outputs_list.setFont(QFont("Arial", 20))
-        self.outputs_list.setFixedHeight(150)  # Shortened for compactness
-        self.outputs_list.setStyleSheet("""
-            QListWidget {
-                color: #ffc107;
-                background: #2a3b5e;
-                border: 2px solid #ffffff;
-                border-radius: 8px;
-            }
-            QListWidget::item { height: 60px; padding: 5px; }
-        """)
-        right_layout.addWidget(self.outputs_list)
+        # Outputs toggle buttons
+        outputs_layout = QVBoxLayout()
+        outputs_layout.setSpacing(10)
+        self.output_buttons = {
+            "Fellowship 1": QPushButton("Fellowship 1"),
+            "Fellowship 2": QPushButton("Fellowship 2"),
+            "Nursery": QPushButton("Nursery")
+        }
+        for name, button in self.output_buttons.items():
+            button.setFont(QFont("Arial", 20))
+            button.setFixedSize(200, 60)
+            button.setCheckable(True)
+            output_idx = {"Fellowship 1": 1, "Fellowship 2": 2, "Nursery": 3}[name]
+            is_current = 2 in self.parent.input_output_map and output_idx in self.parent.input_output_map.get(2, [])
+            is_other = any(other_input != 2 and output_idx in self.parent.input_output_map.get(other_input, []) and self.parent.active_inputs.get(other_input, False) for other_input in self.parent.input_output_map)
+            self.update_output_button_style(name, is_current, is_other)
+            button.clicked.connect(lambda checked, n=name: self.toggle_output(n, checked))
+            outputs_layout.addWidget(button)
         
-        select_outputs_button = QPushButton("Select Outputs")
-        select_outputs_button.setFont(QFont("Arial", 20))
-        select_outputs_button.setFixedSize(200, 60)  # Wider for readability
-        select_outputs_button.setStyleSheet("""
-            QPushButton {
-                background: #1e88e5;  /* Blue */
-                color: #ffffff;
-                border-radius: 8px;
-                padding: 10px;
-            }
-        """)
-        select_outputs_button.clicked.connect(self.open_output_dialog)
-        right_layout.addWidget(select_outputs_button)
+        right_layout.addLayout(outputs_layout)
         
-        buttons_layout = QVBoxLayout()
-        buttons_layout.setSpacing(25)  # Increased to prevent overlap
+        # Play/Stop/Schedule buttons (horizontal)
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(20)  # Horizontal spacing
         for action, icon, color, qt_icon in [
             ("Play", "play.png", "#4caf50", QStyle.SP_MediaPlay),
             ("Stop", "stop.png", "#e53935", QStyle.SP_MediaStop),
             ("Schedule", "schedule.png", "#4caf50", QStyle.SP_FileDialogDetailedView)
         ]:
-            button = QPushButton(action)
-            button.setFixedSize(120, 120)  # Larger for touch
+            button = QPushButton()
+            button.setFixedSize(128, 128)  # Square, larger touch target
             button.setFont(QFont("Arial", 20))
             icon_path = f"/home/admin/gui/icons/{icon}"
             if os.path.exists(icon_path):
@@ -299,7 +190,7 @@ class SourceScreen:
         bottom_layout = QHBoxLayout()
         self.sync_status_label = QLabel("Sync: Idle")
         self.sync_status_label.setFont(QFont("Arial", 20, QFont.Bold))
-        self.sync_status_label.setStyleSheet("color: #ffc107;")
+        self.sync_status_label.setStyleSheet("color: #ffc107; background: transparent;")
         bottom_layout.addWidget(self.sync_status_label)
         
         bottom_layout.addStretch()
@@ -311,29 +202,68 @@ class SourceScreen:
         
         main_layout.addLayout(bottom_layout)
         
-        # Apply stylesheet to the QWidget
-        self.widget.setStyleSheet("""
-            QWidget {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1e2a44, stop:1 #2a3b5e);
-            }
-        """)
+        # Apply solid background to the QWidget
+        self.widget.setStyleSheet("QWidget { background: #2a3b5e; }")
         logging.debug("SourceScreen: UI setup completed")
+
+    def update_output_button_style(self, name, is_current, is_other):
+        button = self.output_buttons[name]
+        if is_current:
+            button.setText(f"{name} (Selected)")
+            button.setStyleSheet("""
+                QPushButton {
+                    background: #1f618d;
+                    color: white;
+                    border-radius: 8px;
+                    padding: 10px;
+                }
+            """)
+        elif is_other:
+            button.setText(f"{name} (Other Input)")
+            button.setStyleSheet("""
+                QPushButton {
+                    background: #c0392b;
+                    color: white;
+                    border-radius: 8px;
+                    padding: 10px;
+                }
+            """)
+        else:
+            button.setText(name)
+            button.setStyleSheet("""
+                QPushButton {
+                    background: #7f8c8d;
+                    color: white;
+                    border-radius: 8px;
+                    padding: 10px;
+                }
+            """)
+        button.setChecked(is_current or is_other)
+
+    def toggle_output(self, tv_name, checked):
+        output_map = {"Fellowship 1": 1, "Fellowship 2": 2, "Nursery": 3}
+        output_idx = output_map[tv_name]
+        input_num = 2  # Local Files
+        if checked:
+            if input_num not in self.parent.input_output_map:
+                self.parent.input_output_map[input_num] = []
+            if output_idx not in self.parent.input_output_map[input_num]:
+                self.parent.input_output_map[input_num].append(output_idx)
+        else:
+            if input_num in self.parent.input_output_map and output_idx in self.parent.input_output_map[input_num]:
+                self.parent.input_output_map[input_num].remove(output_idx)
+                if not self.parent.input_output_map[input_num]:
+                    del self.parent.input_output_map[input_num]
+        is_current = input_num in self.parent.input_output_map and output_idx in self.parent.input_output_map.get(input_num, [])
+        is_other = any(other_input != input_num and output_idx in self.parent.input_output_map.get(other_input, []) and self.parent.active_inputs.get(other_input, False) for other_input in self.parent.input_output_map)
+        self.update_output_button_style(tv_name, is_current, is_other)
+        logging.debug(f"SourceScreen: Toggled output {tv_name}: checked={checked}, map={self.parent.input_output_map}")
 
     def file_selected(self, item):
         if self.source_name == "Local Files":
             file_path = os.path.join("/home/admin/videos", item.text())
             self.parent.input_paths[2] = file_path
             logging.debug(f"SourceScreen: Selected file: {file_path}")
-
-    def open_output_dialog(self):
-        dialog = OutputDialog(self.parent, 2, self.parent.input_output_map, self.parent.active_inputs)
-        if dialog.exec_():
-            outputs = self.parent.input_output_map.get(2, [])
-            self.outputs_list.clear()
-            output_map = {1: "Fellowship 1", 2: "Fellowship 2", 3: "Nursery"}
-            for output in outputs:
-                self.outputs_list.addItem(output_map[output])
-            logging.debug(f"SourceScreen: Updated outputs: {outputs}")
 
     def open_schedule_dialog(self):
         dialog = ScheduleDialog(self.parent, 2)
@@ -348,7 +278,7 @@ class SourceScreen:
     def update_playback_state(self):
         is_playing = self.parent.interface.source_states.get(self.source_name, False)
         self.playback_state_label.setText(f"Playback: {'Playing' if is_playing else 'Stopped'}")
-        self.playback_state_label.setStyleSheet(f"color: {'#4caf50' if is_playing else '#e53935'};")  # Green for Playing, Red for Stopped
+        self.playback_state_label.setStyleSheet(f"color: {'#4caf50' if is_playing else '#e53935'}; background: transparent;")  # Green for Playing, Red for Stopped
         icon_path = f"/home/admin/gui/icons/{'pause.png' if is_playing else 'play.png'}"
         qt_icon = QStyle.SP_MediaPause if is_playing else QStyle.SP_MediaPlay
         if os.path.exists(icon_path):
@@ -358,5 +288,4 @@ class SourceScreen:
         else:
             self.play_button.setIcon(self.widget.style().standardIcon(qt_icon))  # Qt fallback
             logging.warning(f"SourceScreen: Play/Pause custom icon not found: {icon_path}, using Qt icon {qt_icon}")
-            self.play_button.setText("Pause" if is_playing else "Play")
         self.playback_state_label.update()
