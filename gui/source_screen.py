@@ -38,6 +38,7 @@
 # - Revamped UI: 100x100px buttons, 28pt/20pt fonts, 2/3 vs. 1/3 layout, vibrant colors.
 # - Added prominent sync status and playback state labels with color-coded feedback.
 # - Optimized for touchscreen: 15px margins/spacing, 60px list items, no hover effects.
+# - Fixed AttributeError: Changed self.setStyleSheet to self.widget.setStyleSheet.
 #
 # Known Considerations:
 # - File listbox shows only .mp4/.mkv files; verify /home/admin/videos accessibility.
@@ -50,6 +51,7 @@
 # - PyQt5: GUI framework.
 # - Files: kiosk.py (parent), schedule_dialog.py (scheduling), utilities.py (list_files, schedule).
 # - os: For file listing.
+# - Note: list_files and save_schedule from utilities.py are used by OutputDialog, not SourceScreen.
 
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QListWidget, QLabel, QPushButton, QDialog
 from PyQt5.QtCore import Qt
@@ -151,7 +153,7 @@ class OutputDialog(QDialog):
                 if not self.input_output_map[self.input_num]:
                     del self.input_output_map[self.input_num]
         is_current = self.input_num in self.input_output_map and output_idx in self.input_output_map.get(self.input_num, [])
-        is_other = any(other_input != self.input_num and output_idx in self.input_output_map.get(other_input, []) and self.active_inputs.get(other_input, False) for other_input in input_output_map)
+        is_other = any(other_input != self.input_num and output_idx in input_output_map.get(other_input, []) and self.active_inputs.get(other_input, False) for other_input in input_output_map)
         self.update_button_style(tv_name, is_current, is_other)
 
 class SourceScreen:
@@ -279,7 +281,8 @@ class SourceScreen:
         right_layout.addStretch()
         layout.addLayout(right_layout, 1)
         
-        self.setStyleSheet("""
+        # Apply stylesheet to the QWidget, not the SourceScreen instance
+        self.widget.setStyleSheet("""
             QWidget {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1e2a44, stop:1 #2a3b5e);
             }
