@@ -41,6 +41,7 @@
 # - Fixed AttributeError: Changed self.setStyleSheet to self.widget.setStyleSheet.
 # - Fixed alignment: Shortened file list (300px), moved status messages to bottom left,
 #   repositioned Select Outputs near outputs list, fixed button overlap, added icon fallbacks.
+# - Fixed AttributeError: Changed self.style() to self.widget.style() for Qt icon fallbacks.
 #
 # Known Considerations:
 # - File listbox shows only .mp4/.mkv files; verify /home/admin/videos accessibility.
@@ -260,10 +261,10 @@ class SourceScreen:
             if os.path.exists(icon_path):
                 button.setIcon(QIcon(icon_path))
                 button.setIconSize(Qt.Size(90, 90))  # Larger for prominence
-                logging.debug(f"SourceScreen: Loaded icon for {action}: {icon_path}")
+                logging.debug(f"SourceScreen: Loaded custom icon for {action}: {icon_path}")
             else:
-                button.setIcon(self.style().standardIcon(qt_icon))  # Qt fallback
-                logging.warning(f"SourceScreen: Icon not found for {action}: {icon_path}, using Qt icon")
+                button.setIcon(self.widget.style().standardIcon(qt_icon))  # Qt fallback
+                logging.warning(f"SourceScreen: Custom icon not found for {action}: {icon_path}, using Qt icon {qt_icon}")
             button.setStyleSheet(f"""
                 QPushButton {{
                     background: {color};
@@ -328,9 +329,9 @@ class SourceScreen:
         if os.path.exists(icon_path):
             self.play_button.setIcon(QIcon(icon_path))
             self.play_button.setIconSize(Qt.Size(90, 90))
-            logging.debug(f"SourceScreen: Updated play button icon: {icon_path}")
+            logging.debug(f"SourceScreen: Updated play button with custom icon: {icon_path}")
         else:
-            self.play_button.setIcon(self.style().standardIcon(qt_icon))
-            logging.warning(f"SourceScreen: Play/Pause icon not found: {icon_path}, using Qt icon")
+            self.play_button.setIcon(self.widget.style().standardIcon(qt_icon))  # Qt fallback
+            logging.warning(f"SourceScreen: Play/Pause custom icon not found: {icon_path}, using Qt icon {qt_icon}")
             self.play_button.setText("Pause" if is_playing else "Play")
         self.playback_state_label.update()
