@@ -5,21 +5,21 @@
 # Raspberry Pi 5 with X11. The SourceScreen class is a PyQt5 QWidget for displaying
 # source-specific interfaces (e.g., Local Files, 787x492px) with a 28pt title, 20pt fonts,
 # 1/2 width file listbox (300px height), 1/2 width TV outputs toggle buttons (200x60px, vivid
-# yellow #ffc107 text), and horizontal Play/Stop/Schedule buttons (128x128px, icons only).
+# yellow #ffc107 text), and horizontal Play/Stop/Schedule buttons (140x140px, icons only).
 # Sync/playback status span the full width at the bottom in a horizontal layout.
 #
 # Key Functionality:
 # - Displays a file listbox (300px height) for /home/admin/videos (Local Files).
 # - Shows toggle buttons for selecting TV outputs (Fellowship 1, Fellowship 2, Nursery).
 # - Places sync and playback status in a horizontal layout at the bottom (full width).
-# - Provides Play, Stop, Schedule buttons (128x128px, 120x120px icons only).
+# - Provides Play, Stop, Schedule buttons (140x140px, 132x132px icons only).
 # - Updates KioskGUI.input_paths and input_output_map based on selections.
 #
 # Environment:
 # - Raspberry Pi 5, X11 (QT_QPA_PLATFORM=xcb), PyQt5, 787x492px main window.
 # - Logs: /home/admin/gui/logs/kiosk.log (app logs, including file selection, playback).
 # - Videos: /home/admin/videos (local storage).
-# - Icons: /home/admin/gui/icons (128x128px: play.png, stop.png, schedule.png, pause.png).
+# - Icons: /home/admin/kiosk/icons (128x128px: play.png, stop.png, schedule.png, pause.png).
 # - Called by: kiosk.py (show_source_screen).
 #
 # Integration Notes:
@@ -27,7 +27,7 @@
 # - Default to Fellowship 1 (output 1) if no outputs selected (implement in playback.py).
 #
 # Recent Changes (as of May 2025):
-# - Revamped UI: 128x128px icon-only buttons, 28pt/20pt fonts, 1/2 vs. 1/2 layout.
+# - Revamped UI: 140x140px icon-only buttons, 28pt/20pt fonts, 1/2 vs. 1/2 layout.
 # - Added sync/playback status in horizontal layout at bottom (full width).
 # - Replaced Select Outputs button with toggle buttons in outputs list.
 # - Fixed alignment: Shortened file list (300px), horizontal buttons, removed text.
@@ -35,9 +35,10 @@
 # - Fixed AttributeError: Changed self.style() to self.widget.style() for Qt icons.
 # - Fixed file list: Case-insensitive extensions, added logging.
 # - Removed gradient backgrounds, used solid #2a3b5e.
-# - Buttons now 128x128px, horizontal layout, 20px spacing.
+# - Buttons now 140x140px, horizontal layout, 25px spacing.
 # - Increased icon size to 110x110px, reduced padding to 8px.
-# - Increased icon size to 120x120px, reduced padding to 4px for larger custom icons.
+# - Increased icon size to 120x120px, reduced padding to 4px.
+# - Fixed icon path to /home/admin/kiosk/icons, increased icon size to 132x132px, padding to 2px.
 #
 # Known Considerations:
 # - File listbox shows only .mp4/.mkv files (case-insensitive); verify /home/admin/videos.
@@ -67,6 +68,7 @@ class SourceScreen:
         self.output_buttons = {}  # Store output toggle buttons
         self.setup_ui()
         logging.debug(f"SourceScreen: Initialized for {source_name}")
+        logging.debug(f"SourceScreen: QT_SCALE_FACTOR={os.environ.get('QT_SCALE_FACTOR', 'Not set')}")
 
     def setup_ui(self):
         logging.debug(f"SourceScreen: Setting up UI for {self.source_name}")
@@ -149,32 +151,40 @@ class SourceScreen:
         
         # Play/Stop/Schedule buttons (horizontal)
         buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(20)  # Horizontal spacing
+        buttons_layout.setSpacing(25)  # Increased for larger buttons
         for action, icon, color, qt_icon in [
             ("Play", "play.png", "#4caf50", QStyle.SP_MediaPlay),
             ("Stop", "stop.png", "#e53935", QStyle.SP_MediaStop),
-            ("Schedule", "schedule.png", "#4caf50", QStyle.SP_FileDialogDetailedView)
+            ("Schedule", "schedule.png", "#4caf50", QStyle.SP_FileDialogContentsView)
         ]:
             button = QPushButton()
-            button.setFixedSize(128, 128)  # Square, touch-friendly
+            button.setFixedSize(140, 140)  # Larger, touch-friendly
             button.setFont(QFont("Arial", 20))
-            icon_path = f"/home/admin/gui/icons/{icon}"
+            icon_path = f"/home/admin/kiosk/icons/{icon}"
+            icon_dir = "/home/admin/kiosk/icons"
+            if not os.path.exists(icon_dir):
+                logging.error(f"Icon directory not found: {icon_dir}")
+            else:
+                try:
+                    logging.debug(f"SourceScreen: Icon directory contents: {os.listdir(icon_dir)}")
+                except Exception as e:
+                    logging.warning(f"SourceScreen: Failed to list icon directory {icon_dir}: {e}")
             if os.path.exists(icon_path):
                 button.setIcon(QIcon(icon_path))
-                button.setIconSize(Qt.Size(120, 120))  # Maximum size for custom icons
+                button.setIconSize(Qt.Size(132, 132))  # Maximum size for custom icons
                 try:
-                    logging.debug(f"SourceScreen: Loaded custom icon for {action}: {icon_path}, size: 120x120px, file_size: {os.path.getsize(icon_path)} bytes")
+                    logging.debug(f"SourceScreen: Loaded custom icon for {action}: {icon_path}, size: 132x132px, file_size: {os.path.getsize(icon_path)} bytes")
                 except Exception as e:
                     logging.warning(f"SourceScreen: Failed to get file size for {icon_path}: {e}")
             else:
                 button.setIcon(self.widget.style().standardIcon(qt_icon))  # Qt fallback
-                logging.warning(f"SourceScreen: Custom icon not found for {action}: {icon_path}, using Qt icon {qt_icon}, size: 120x120px")
+                logging.warning(f"SourceScreen: Custom icon not found for {action}: {icon_path}, using Qt icon {qt_icon}, size: 132x132px")
             button.setStyleSheet(f"""
                 QPushButton {{
                     background: {color};
                     color: #ffffff;
                     border-radius: 8px;
-                    padding: 4px;
+                    padding: 2px;
                 }}
             """)
             if action == "Play":
@@ -285,16 +295,24 @@ class SourceScreen:
         is_playing = self.parent.interface.source_states.get(self.source_name, False)
         self.playback_state_label.setText(f"Playback: {'Playing' if is_playing else 'Stopped'}")
         self.playback_state_label.setStyleSheet(f"color: {'#4caf50' if is_playing else '#e53935'}; background: transparent;")  # Green for Playing, Red for Stopped
-        icon_path = f"/home/admin/gui/icons/{'pause.png' if is_playing else 'play.png'}"
+        icon_path = f"/home/admin/kiosk/icons/{'pause.png' if is_playing else 'play.png'}"
         qt_icon = QStyle.SP_MediaPause if is_playing else QStyle.SP_MediaPlay
+        icon_dir = "/home/admin/kiosk/icons"
+        if not os.path.exists(icon_dir):
+            logging.error(f"Icon directory not found: {icon_dir}")
+        else:
+            try:
+                logging.debug(f"SourceScreen: Icon directory contents: {os.listdir(icon_dir)}")
+            except Exception as e:
+                logging.warning(f"SourceScreen: Failed to list icon directory {icon_dir}: {e}")
         if os.path.exists(icon_path):
             self.play_button.setIcon(QIcon(icon_path))
-            self.play_button.setIconSize(Qt.Size(120, 120))  # Maximum size for custom icons
+            self.play_button.setIconSize(Qt.Size(132, 132))  # Maximum size for custom icons
             try:
-                logging.debug(f"SourceScreen: Updated play button with custom icon: {icon_path}, size: 120x120px, file_size: {os.path.getsize(icon_path)} bytes")
+                logging.debug(f"SourceScreen: Updated play button with custom icon: {icon_path}, size: 132x132px, file_size: {os.path.getsize(icon_path)} bytes")
             except Exception as e:
                 logging.warning(f"SourceScreen: Failed to get file size for {icon_path}: {e}")
         else:
             self.play_button.setIcon(self.widget.style().standardIcon(qt_icon))  # Qt fallback
-            logging.warning(f"SourceScreen: Play/Pause custom icon not found: {icon_path}, using Qt icon {qt_icon}, size: 120x120px")
+            logging.warning(f"SourceScreen: Play/Pause custom icon not found: {icon_path}, using Qt icon {qt_icon}, size: 132x132px")
         self.playback_state_label.update()
