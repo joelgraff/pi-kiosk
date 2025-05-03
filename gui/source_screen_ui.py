@@ -14,13 +14,15 @@
 # - Improved file listing with directory checks and case-insensitive extensions.
 # - Disabled Play/Stop buttons until file selected.
 # - Moved ScheduleDialog import inside open_schedule_dialog to avoid circular imports.
-# - Moved event handlers (update_playback_state, on_play_clicked, on_stop_clicked,
-#   toggle_output, update_output_button_style) to source_screen.py to fix AttributeError.
+# - Moved event handlers to source_screen.py to fix AttributeError.
+# - Added placeholder QMessageBox and enhanced logging for Schedule dialog.
+# - Moved placeholder to except blocks and added window flags logging.
+# - Added dialog.show(), raise_(), activateWindow(), and finished signal for Schedule dialog debugging.
 #
 # Dependencies:
 # - config.py: Filepaths, TV outputs, UI constants.
 
-from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QListWidget, QLabel, QPushButton, QStyle, QMessageBox
+from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QListWidget, QLabel, QPushButton, QStyle, QMessageBox, QDialog, QVBoxLayout
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont, QIcon
 import logging
@@ -251,15 +253,37 @@ def open_schedule_dialog(self):
         logging.debug("SourceScreen: Successfully imported ScheduleDialog")
         dialog = ScheduleDialog(self.parent, LOCAL_FILES_INPUT_NUM)
         dialog.setModal(True)
-        dialog.setFixedSize(300, 200)  # Ensure visible size
-        logging.debug(f"SourceScreen: Schedule dialog initialized for Input {LOCAL_FILES_INPUT_NUM}")
-        dialog.exec_()
-        logging.debug("SourceScreen: Schedule dialog closed")
+        dialog.setFixedSize(300, 200)
+        dialog.setVisible(True)
+        logging.debug(f"SourceScreen: Schedule dialog initialized for Input {LOCAL_FILES_INPUT_NUM}, modal={dialog.isModal()}, visible={dialog.isVisible()}, flags={dialog.windowFlags()}, parent={dialog.parent()}, geometry={dialog.geometry()}")
+        # Connect to finished signal to log closure reason
+        dialog.finished.connect(lambda result: logging.debug(f"SourceScreen: Schedule dialog finished with result: {result}"))
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        result = dialog.exec_()
+        logging.debug(f"SourceScreen: Schedule dialog closed with result: {result}")
     except ImportError as e:
         logging.error(f"SourceScreen: Failed to import ScheduleDialog: {e}")
         self.sync_status_label.setText("Schedule unavailable")
-        QMessageBox.warning(self.widget, "Error", "Scheduling is unavailable: Module not found")
+        placeholder = QMessageBox(self.widget)
+        placeholder.setWindowTitle("Schedule Error")
+        placeholder.setText("Scheduling is unavailable: Module not found")
+        placeholder.setStandardButtons(QMessageBox.Ok)
+        placeholder.setFixedSize(300, 200)
+        placeholder.exec_()
+        logging.debug("SourceScreen: Placeholder dialog displayed for ImportError")
     except Exception as e:
         logging.error(f"SourceScreen: Failed to open ScheduleDialog: {e}")
         self.sync_status_label.setText("Schedule error")
-        QMessageBox.warning(self.widget, "Error", f"Scheduling failed: {str(e)}")
+        # Fallback QDialog
+        fallback_dialog = QDialog(self.widget)
+        fallback_dialog.setWindowTitle("Schedule Fallback")
+        fallback_dialog.setFixedSize(300, 200)
+        layout = QVBoxLayout(fallback_dialog)
+        label = QLabel("Scheduling failed. Please check logs.")
+        label.setFont(QFont(*WIDGET_FONT))
+        layout.addWidget(label)
+        fallback_dialog.setModal(True)
+        fallback_dialog.exec_()
+        logging.debug("SourceScreen: Fallback dialog displayed for Exception")
