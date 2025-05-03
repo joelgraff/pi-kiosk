@@ -8,11 +8,12 @@
 # - Raspberry Pi 5, X11 (QT_QPA_PLATFORM=xcb), PyQt5, 787x492px window.
 # - Logs: /home/admin/kiosk/logs/kiosk.log.
 # - Icons: /home/admin/kiosk/icons (128x128px).
-# - Videos: /home/admin/kiosk/videos.
+# - Videos: /home/admin/videos.
 #
 # Recent Changes (as of June 2025):
 # - Added import os for QT_SCALE_FACTOR logging.
 # - Delayed setup_ui import to avoid circular dependency.
+# - Moved setup_ui import to top for early error detection.
 #
 # Dependencies:
 # - PyQt5: GUI framework.
@@ -22,6 +23,11 @@
 from PyQt5.QtWidgets import QWidget
 import logging
 import os
+try:
+    from source_screen_ui import setup_ui
+except ImportError as e:
+    logging.error(f"SourceScreen: Failed to import setup_ui: {e}")
+    raise
 
 class SourceScreen:
     def __init__(self, parent, source_name):
@@ -31,6 +37,7 @@ class SourceScreen:
         self.output_buttons = {}  # Store output toggle buttons
         self.file_list = None  # Set in setup_ui
         self.play_button = None  # Set in setup_ui
+        self.stop_button = None  # Set in setup_ui
         self.sync_status_label = None  # Set in setup_ui
         self.playback_state_label = None  # Set in setup_ui
         self.setup_ui()
@@ -38,9 +45,4 @@ class SourceScreen:
         logging.debug(f"SourceScreen: QT_SCALE_FACTOR={os.environ.get('QT_SCALE_FACTOR', 'Not set')}")
 
     def setup_ui(self):
-        try:
-            from source_screen_ui import setup_ui
-            setup_ui(self)
-        except ImportError as e:
-            logging.error(f"SourceScreen: Failed to import setup_ui: {e}")
-            raise
+        setup_ui(self)
