@@ -6,6 +6,8 @@
 # Recent Changes (as of June 2025):
 # - Simplified icon logging.
 # - Extracted hardcoded values to config.py.
+# - Updated filepaths to use /home/admin/kiosk/ project root.
+# - Added error handling for ScheduleDialog.
 #
 # Dependencies:
 # - config.py: Filepaths, input number, colors, icon files.
@@ -13,10 +15,9 @@
 from PyQt5.QtWidgets import QStyle
 from PyQt5.QtCore import QSize
 from PyQt5.QtGui import QIcon
-from schedule_dialog import ScheduleDialog
 import logging
 import os
-from config import VIDEO_DIR, ICON_DIR, ICON_FILES, LOCAL_FILES_INPUT_NUM, PLAY_BUTTON_COLOR, TEXT_COLOR, PLAYBACK_STATUS_COLORS, ICON_SIZE
+from config import VIDEO_DIR, ICON_DIR, ICON_FILES, LOCAL_FILES_INPUT_NUM, PLAY_BUTTON_COLOR, TEXT_COLOR, PLAYBACK_STATUS_COLORS, ICON_SIZE, BORDER_RADIUS, BUTTON_PADDING
 
 def file_selected(self, item):
     if self.source_name == "Local Files":
@@ -25,9 +26,18 @@ def file_selected(self, item):
         logging.debug(f"SourceScreen: Selected file: {file_path}")
 
 def open_schedule_dialog(self):
-    dialog = ScheduleDialog(self.parent, LOCAL_FILES_INPUT_NUM)
-    dialog.exec_()
-    logging.debug("SourceScreen: Schedule dialog closed")
+    logging.debug("SourceScreen: Schedule button clicked")
+    try:
+        from schedule_dialog import ScheduleDialog
+        dialog = ScheduleDialog(self.parent, LOCAL_FILES_INPUT_NUM)
+        dialog.exec_()
+        logging.debug("SourceScreen: Schedule dialog closed")
+    except ImportError as e:
+        logging.error(f"SourceScreen: Failed to import ScheduleDialog: {e}")
+        self.sender().setEnabled(False)  # Disable button
+    except Exception as e:
+        logging.error(f"SourceScreen: Failed to open ScheduleDialog: {e}")
+        self.sender().setEnabled(False)  # Disable button
 
 def update_sync_status(self, status):
     logging.debug(f"SourceScreen: Updating sync status: {status}")
