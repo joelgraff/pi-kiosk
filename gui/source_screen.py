@@ -16,6 +16,7 @@
 # - Enhanced import logging to debug circular imports.
 # - Added event handlers (update_playback_state, on_play_clicked, on_stop_clicked,
 #   toggle_output, update_output_button_style) to fix AttributeError.
+# - Added MPV --fs-screen=n logic for multi-screen playback.
 #
 # Dependencies:
 # - PyQt5: GUI framework.
@@ -90,7 +91,7 @@ class SourceScreen:
         self.playback_state_label.update()
 
     def on_play_clicked(self):
-        from config import LOCAL_FILES_INPUT_NUM, HDMI_OUTPUTS
+        from config import LOCAL_FILES_INPUT_NUM, HDMI_OUTPUTS, VIDEO_DIR
         logging.debug("SourceScreen: Play button clicked")
         if self.file_list.currentItem():
             # Update source_states for Local Files
@@ -105,7 +106,9 @@ class SourceScreen:
                             hdmi_map[hdmi_idx] = []
                         hdmi_map[hdmi_idx].append(output_idx)
             logging.debug(f"SourceScreen: Playback HDMI map: {hdmi_map}")
-            self.parent.playback.toggle_play_pause(self.source_name)
+            file_path = os.path.join(VIDEO_DIR, self.file_list.currentItem().text())
+            # Pass file path and hdmi_map to toggle_play_pause
+            self.parent.playback.toggle_play_pause(self.source_name, file_path, hdmi_map)
             self.update_playback_state()
         else:
             logging.warning("SourceScreen: Play button clicked but no file selected")
