@@ -5,23 +5,25 @@
 # input sources, and UI constants. Used by kiosk.py, source_screen.py, and related files.
 #
 # Categories:
-# - Filepaths: Directories and files for logs, videos, icons, etc., all under /home/admin/kiosk/.
+# - Filepaths: Directories and files for logs, videos, icons, etc.
 # - TV Outputs: Names and mappings for TV outputs.
 # - Inputs: Source names, input numbers, and types.
 # - UI: Window sizes, colors, fonts, button sizes, spacing, etc.
 # - Other: PIN, input numbers, etc.
 #
 # Recent Changes (as of June 2025):
-# - Updated filepaths to use /home/admin/kiosk/ as project root.
+# - Updated filepaths to use /home/admin/kiosk/ as project root for most files.
 # - Fixed TITLE_FONT to use QFont.Bold instead of string "Bold".
+# - Updated VIDEO_DIR to /home/admin/videos (outside project root).
+# - Added HDMI_OUTPUTS to map TV outputs to HDMI ports.
 
 from PyQt5.QtGui import QFont
 
-# Filepaths (all project files under /home/admin/kiosk/)
+# Filepaths
 PROJECT_ROOT = "/home/admin/kiosk"
 LOG_DIR = f"{PROJECT_ROOT}/logs"
 LOG_FILE = f"{LOG_DIR}/kiosk.log"
-VIDEO_DIR = f"{PROJECT_ROOT}/../videos"
+VIDEO_DIR = "/home/admin/videos"  # Videos are under user root
 ICON_DIR = f"{PROJECT_ROOT}/icons"
 SCHEDULE_FILE = f"{PROJECT_ROOT}/schedule.json"
 NETWORK_SHARE_DIR = "/mnt/share"  # External mount
@@ -40,6 +42,12 @@ TV_OUTPUTS = {
     "Sanctuary": 4
 }
 TOTAL_TV_OUTPUTS = len(TV_OUTPUTS)
+
+# HDMI Output Mappings
+HDMI_OUTPUTS = {
+    0: [1, 4],  # HDMI 0: Fellowship 1 (1), Sanctuary (4)
+    1: [2, 3]   # HDMI 1: Fellowship 2 (2), Nursery (3)
+}
 
 # Inputs
 INPUTS = {
