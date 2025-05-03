@@ -9,6 +9,8 @@
 # - Extracted hardcoded values to config.py.
 # - Updated filepaths to use /home/admin/kiosk/ project root.
 # - Fixed QFont error by using QFont.Bold in TITLE_FONT.
+# - Added file listing for /home/admin/kiosk/videos.
+# - Added Back button connection to show_controls.
 #
 # Dependencies:
 # - config.py: Filepaths, TV outputs, UI constants.
@@ -58,6 +60,18 @@ def setup_ui(self):
         }}
         QListWidget::item {{ height: {FILE_LIST_ITEM_HEIGHT}px; padding: {FILE_LIST_PADDING}px; }}
     """)
+    # Populate file list
+    if self.source_name == "Local Files":
+        try:
+            video_extensions = ('.mp4', '.mkv', '.avi')
+            for file_name in os.listdir(VIDEO_DIR):
+                if file_name.lower().endswith(video_extensions):
+                    self.file_list.addItem(file_name)
+                    logging.debug(f"SourceScreen: Added file to list: {file_name}")
+            if self.file_list.count() == 0:
+                logging.warning(f"SourceScreen: No video files found in {VIDEO_DIR}")
+        except Exception as e:
+            logging.error(f"SourceScreen: Failed to list files in {VIDEO_DIR}: {e}")
     self.file_list.itemClicked.connect(self.file_selected)
     left_layout.addWidget(self.file_list)
     
@@ -91,6 +105,7 @@ def setup_ui(self):
             padding: {BUTTON_PADDING['back']}px;
         }}
     """)
+    back_button.clicked.connect(self.parent.show_controls)
     back_button_layout = QHBoxLayout()
     back_button_layout.addStretch()
     back_button_layout.addWidget(back_button)
