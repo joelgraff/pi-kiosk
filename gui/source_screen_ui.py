@@ -1,8 +1,8 @@
-# source_screen_ui.py: UI setup and event handlers for SourceScreen
+# source_screen_ui.py: UI setup for SourceScreen
 #
 # Overview:
-# Defines the setup_ui function and event handlers for the Local Files screen.
-# Includes file list, TV output toggles, Play/Stop/Schedule buttons, Back button, and status labels.
+# Defines the setup_ui function for the Local Files screen.
+# Sets up file list, TV output toggles, Play/Stop/Schedule buttons, Back button, and status labels.
 #
 # Recent Changes (as of June 2025):
 # - Fixed 'setAlignment' error on Back button using QHBoxLayout.
@@ -13,12 +13,9 @@
 # - Added Back button connection to show_controls.
 # - Improved file listing with directory checks and case-insensitive extensions.
 # - Disabled Play/Stop buttons until file selected.
-# - Merged file_selected, open_schedule_dialog, update_sync_status, update_playback_state,
-#   toggle_output, and update_output_button_style to avoid circular imports.
-# - Expanded video extensions and added placeholder for empty file list.
-# - Updated playback state handling and HDMI output assignments.
-# - Enhanced Schedule dialog with modal setting and detailed logging.
 # - Moved ScheduleDialog import inside open_schedule_dialog to avoid circular imports.
+# - Moved event handlers (update_playback_state, on_play_clicked, on_stop_clicked,
+#   toggle_output, update_output_button_style) to source_screen.py to fix AttributeError.
 #
 # Dependencies:
 # - config.py: Filepaths, TV outputs, UI constants.
@@ -29,14 +26,14 @@ from PyQt5.QtGui import QFont, QIcon
 import logging
 import os
 from config import (
-    VIDEO_DIR, ICON_DIR, ICON_FILES, TV_OUTPUTS, HDMI_OUTPUTS, SOURCE_SCREEN_BACKGROUND,
+    VIDEO_DIR, ICON_DIR, ICON_FILES, TV_OUTPUTS, SOURCE_SCREEN_BACKGROUND,
     TITLE_FONT, WIDGET_FONT, BACK_BUTTON_FONT, TEXT_COLOR, FILE_LIST_BORDER_COLOR,
     SCHEDULE_BUTTON_COLOR, PLAY_BUTTON_COLOR, STOP_BUTTON_COLOR, SYNC_STATUS_COLOR,
     PLAYBACK_STATUS_COLORS, BACK_BUTTON_COLOR, FILE_LIST_HEIGHT, FILE_LIST_ITEM_HEIGHT,
     SCHEDULE_BUTTON_SIZE, OUTPUT_BUTTON_SIZE, PLAY_STOP_BUTTON_SIZE, BACK_BUTTON_SIZE,
     ICON_SIZE, MAIN_LAYOUT_SPACING, TOP_LAYOUT_SPACING, OUTPUTS_CONTAINER_SPACING,
     OUTPUT_LAYOUT_SPACING, BUTTONS_LAYOUT_SPACING, RIGHT_LAYOUT_SPACING,
-    BUTTON_PADDING, FILE_LIST_PADDING, BORDER_RADIUS, LOCAL_FILES_INPUT_NUM, OUTPUT_BUTTON_COLORS
+    BUTTON_PADDING, FILE_LIST_PADDING, BORDER_RADIUS, LOCAL_FILES_INPUT_NUM
 )
 
 def setup_ui(self):
@@ -157,8 +154,8 @@ def setup_ui(self):
         output_idx = TV_OUTPUTS[name]
         is_current = 2 in self.parent.input_output_map and output_idx in self.parent.input_output_map.get(2, [])
         is_other = any(other_input != 2 and output_idx in self.parent.input_output_map.get(other_input, []) and self.parent.active_inputs.get(other_input, False) for other_input in self.parent.input_output_map)
-        update_output_button_style(self, name, is_current, is_other)
-        button.clicked.connect(lambda checked, n=name: toggle_output(self, n, checked))
+        self.update_output_button_style(name, is_current, is_other)
+        button.clicked.connect(lambda checked, n=name: self.toggle_output(n, checked))
         if name in ["Fellowship 1", "Nursery"]:
             outputs_left_layout.addWidget(button)
         else:
@@ -201,10 +198,10 @@ def setup_ui(self):
         button.setEnabled(False)  # Disable until file selected
         if action == "Play":
             self.play_button = button
-            button.clicked.connect(lambda: on_play_clicked(self))
+            button.clicked.connect(self.on_play_clicked)
         elif action == "Stop":
             self.stop_button = button
-            button.clicked.connect(lambda: on_stop_clicked(self))
+            button.clicked.connect(self.on_stop_clicked)
         buttons_layout.addWidget(button)
     
     right_layout.addLayout(buttons_layout)
@@ -233,10 +230,11 @@ def setup_ui(self):
     logging.debug("SourceScreen: UI setup completed")
 
 def file_selected(self, item):
+    logging.debug(f"SourceScreen: File selected: {item.text()}")
     if self.source_name == "Local Files":
         file_path = os.path.join(VIDEO_DIR, item.text())
         self.parent.input_paths[LOCAL_FILES_INPUT_NUM] = file_path
-        logging.debug(f"SourceScreen: Selected file: {file_path}")
+        logging.debug(f"SourceScreen: Selected file path: {file_path}")
         if self.play_button and self.stop_button:
             self.play_button.setEnabled(True)
             self.stop_button.setEnabled(True)
@@ -265,99 +263,3 @@ def open_schedule_dialog(self):
         logging.error(f"SourceScreen: Failed to open ScheduleDialog: {e}")
         self.sync_status_label.setText("Schedule error")
         QMessageBox.warning(self.widget, "Error", f"Scheduling failed: {str(e)}")
-
-def update_sync_status(self, status):
-    logging.debug(f"SourceScreen: Updating sync status: {status}")
-    self.sync_status_label.setText(f"Sync: {status}")
-    self.sync_status_label.update()
-
-def update_playback_state(self):
-    is_playing = self.parent.interface.source_states.get(self.source_name, False)
-    state = "Playing" if is_playing else "Stopped"
-    self.playback_state_label.setText(f"Playback: {state}")
-    self.playback_state_label.setStyleSheet(f"color: {PLAYBACK_STATUS_COLORS[state.lower()]}; background: transparent;")
-    icon_file = ICON_FILES["pause"] if is_playing else ICON_FILES["play"]
-    icon_path = os.path.join(ICON_DIR, icon_file)
-    qt_icon = QStyle.SP_MediaPause if is_playing else QStyle.SP_MediaPlay
-    if os.path.exists(icon_path):
-        self.play_button.setIcon(QIcon(icon_path))
-        self.play_button.setIconSize(QSize(*ICON_SIZE))
-        logging.debug(f"SourceScreen: Updated play button with custom icon: {icon_path}")
-    else:
-        self.play_button.setIcon(self.widget.style().standardIcon(qt_icon))
-        logging.warning(f"SourceScreen: Play/Pause custom icon not found: {icon_path}")
-    self.play_button.setStyleSheet(f"""
-        QPushButton {{
-            background: {PLAY_BUTTON_COLOR};
-            color: {TEXT_COLOR};
-            border-radius: {BORDER_RADIUS}px;
-            padding: {BUTTON_PADDING['play_stop']}px;
-            icon-size: {ICON_SIZE[0]}px;
-        }}
-    """)
-    self.playback_state_label.update()
-
-def update_output_button_style(self, name, is_current, is_other):
-    button = self.output_buttons[name]
-    button.setText(name)  # Static text
-    if is_current:
-        color = OUTPUT_BUTTON_COLORS["selected"]
-    elif is_other:
-        color = OUTPUT_BUTTON_COLORS["other"]
-    else:
-        color = OUTPUT_BUTTON_COLORS["unselected"]
-    button.setStyleSheet(f"""
-        QPushButton {{
-            background: {color};
-            color: white;
-            border-radius: {BORDER_RADIUS}px;
-            padding: {BUTTON_PADDING['schedule_output']}px;
-        }}
-    """)
-    button.setChecked(is_current or is_other)
-
-def toggle_output(self, tv_name, checked):
-    output_idx = TV_OUTPUTS[tv_name]
-    input_num = LOCAL_FILES_INPUT_NUM
-    if checked:
-        if input_num not in self.parent.input_output_map:
-            self.parent.input_output_map[input_num] = []
-        if output_idx not in self.parent.input_output_map[input_num]:
-            self.parent.input_output_map[input_num].append(output_idx)
-            logging.debug(f"SourceScreen: Assigned {tv_name} (idx {output_idx}) to input {input_num}")
-    else:
-        if input_num in self.parent.input_output_map and output_idx in self.parent.input_output_map[input_num]:
-            self.parent.input_output_map[input_num].remove(output_idx)
-            logging.debug(f"SourceScreen: Removed {tv_name} (idx {output_idx}) from input {input_num}")
-            if not self.parent.input_output_map[input_num]:
-                del self.parent.input_output_map[input_num]
-    is_current = input_num in self.parent.input_output_map and output_idx in self.parent.input_output_map.get(input_num, [])
-    is_other = any(other_input != input_num and output_idx in self.parent.input_output_map.get(other_input, []) and self.parent.active_inputs.get(other_input, False) for other_input in self.parent.input_output_map)
-    update_output_button_style(self, tv_name, is_current, is_other)
-    logging.debug(f"SourceScreen: Toggled output {tv_name}: checked={checked}, map={self.parent.input_output_map}")
-
-def on_play_clicked(self):
-    logging.debug("SourceScreen: Play button clicked")
-    if self.file_list.currentItem():
-        # Update source_states for Local Files
-        self.parent.interface.source_states[self.source_name] = True
-        # Map outputs to HDMI ports
-        selected_outputs = self.parent.input_output_map.get(LOCAL_FILES_INPUT_NUM, [])
-        hdmi_map = {}
-        for hdmi_idx, output_indices in HDMI_OUTPUTS.items():
-            for output_idx in output_indices:
-                if output_idx in selected_outputs:
-                    if hdmi_idx not in hdmi_map:
-                        hdmi_map[hdmi_idx] = []
-                    hdmi_map[hdmi_idx].append(output_idx)
-        logging.debug(f"SourceScreen: Playback HDMI map: {hdmi_map}")
-        self.parent.playback.toggle_play_pause(self.source_name)
-        self.update_playback_state()
-    else:
-        logging.warning("SourceScreen: Play button clicked but no file selected")
-
-def on_stop_clicked(self):
-    logging.debug("SourceScreen: Stop button clicked")
-    self.parent.interface.source_states[self.source_name] = False
-    self.parent.playback.stop_input(2)
-    self.update_playback_state()
