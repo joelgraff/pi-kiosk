@@ -3,8 +3,8 @@
 # Overview:
 # Defines functions for file selection, schedule dialog, and status updates.
 #
-# Recent Changes (as of May 2025):
-# - Updated Schedule button to text-based in left layout.
+# Recent Changes (as of June 2025):
+# - Simplified icon logging.
 
 from PyQt5.QtWidgets import QStyle
 from PyQt5.QtCore import QSize
@@ -35,24 +35,13 @@ def update_playback_state(self):
     self.playback_state_label.setStyleSheet(f"color: {'#4caf50' if is_playing else '#e53935'}; background: transparent;")
     icon_path = f"/home/admin/kiosk/gui/icons/{'pause.png' if is_playing else 'play.png'}"
     qt_icon = QStyle.SP_MediaPause if is_playing else QStyle.SP_MediaPlay
-    icon_dir = "/home/admin/kiosk/gui/icons"
-    if not os.path.exists(icon_dir):
-        logging.error(f"Icon directory not found: {icon_dir}")
-    else:
-        try:
-            logging.debug(f"SourceScreen: Icon directory contents: {os.listdir(icon_dir)}")
-        except Exception as e:
-            logging.warning(f"SourceScreen: Failed to list icon directory {icon_dir}: {e}")
     if os.path.exists(icon_path):
         self.play_button.setIcon(QIcon(icon_path))
         self.play_button.setIconSize(QSize(112, 112))
-        try:
-            logging.debug(f"SourceScreen: Updated play button with custom icon: {icon_path}, size: 112x112px, file_size: {os.path.getsize(icon_path)} bytes")
-        except Exception as e:
-            logging.warning(f"SourceScreen: Failed to get file size for {icon_path}: {e}")
+        logging.debug(f"SourceScreen: Updated play button with custom icon: {icon_path}")
     else:
         self.play_button.setIcon(self.widget.style().standardIcon(qt_icon))
-        logging.warning(f"SourceScreen: Play/Pause custom icon not found: {icon_path}, using Qt icon {qt_icon}, size: 112x112px")
+        logging.warning(f"SourceScreen: Play/Pause custom icon not found: {icon_path}")
     self.play_button.setStyleSheet(f"""
         QPushButton {{
             background: #4caf50;

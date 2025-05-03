@@ -4,12 +4,13 @@
 # Defines the setup_ui function to create the Local Files screen layout.
 # Includes file list, TV output toggles, Play/Stop/Schedule buttons, Back button, and status labels.
 #
-# Recent Changes (as of May 2025):
+# Recent Changes (as of June 2025):
+# - Fixed 'setAlignment' error on Back button using QHBoxLayout.
 # - Schedule button: Moved to left layout, text "Schedule...", 180x60px, no icon.
-# - TV outputs: Added Sanctuary, two layouts (Fellowship 1/Nursery, Fellowship 2/Sanctuary), 180x60px.
-# - Back button: Upper right, 80x40px.
+# - TV outputs: Two layouts (Fellowship 1/Nursery, Fellowship 2/Sanctuary), 180x60px.
+# - Back button: Upper right, 80x40px, right-aligned via layout.
 # - TV label: "TV", 28pt, white, centered.
-# - File list: 260px for balance, added spacing to right layout.
+# - File list: 260px, added 20px spacing to right layout.
 
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QListWidget, QLabel, QPushButton, QStyle
 from PyQt5.QtCore import Qt, QSize
@@ -36,7 +37,7 @@ def setup_ui(self):
     
     self.file_list = QListWidget()
     self.file_list.setFont(QFont("Arial", 20))
-    self.file_list.setFixedHeight(260)  # Reduced for balance
+    self.file_list.setFixedHeight(260)
     self.file_list.setStyleSheet("""
         QListWidget {
             color: #ffffff;
@@ -79,9 +80,10 @@ def setup_ui(self):
             padding: 5px;
         }
     """)
-    back_button.setAlignment(Qt.AlignRight)
-    back_button.clicked.connect(lambda: self.parent.show_main_menu())
-    right_layout.addWidget(back_button)
+    back_button_layout = QHBoxLayout()
+    back_button_layout.addStretch()
+    back_button_layout.addWidget(back_button)
+    right_layout.addLayout(back_button_layout)
     
     outputs_label = QLabel("TV")
     outputs_label.setFont(QFont("Arial", 28, QFont.Bold))
@@ -121,7 +123,7 @@ def setup_ui(self):
     outputs_container.addLayout(outputs_left_layout)
     outputs_container.addLayout(outputs_right_layout)
     right_layout.addLayout(outputs_container)
-    right_layout.addSpacing(20)  # Balance height
+    right_layout.addSpacing(20)
     
     # Play/Stop buttons (horizontal)
     buttons_layout = QHBoxLayout()
@@ -134,24 +136,13 @@ def setup_ui(self):
         button.setFixedSize(120, 120)
         button.setFont(QFont("Arial", 20))
         icon_path = f"/home/admin/kiosk/gui/icons/{icon}"
-        icon_dir = "/home/admin/kiosk/gui/icons"
-        if not os.path.exists(icon_dir):
-            logging.error(f"Icon directory not found: {icon_dir}")
-        else:
-            try:
-                logging.debug(f"SourceScreen: Icon directory contents: {os.listdir(icon_dir)}")
-            except Exception as e:
-                logging.warning(f"SourceScreen: Failed to list icon directory {icon_dir}: {e}")
         if os.path.exists(icon_path):
             button.setIcon(QIcon(icon_path))
             button.setIconSize(QSize(112, 112))
-            try:
-                logging.debug(f"SourceScreen: Loaded custom icon for {action}: {icon_path}, size: 112x112px, file_size: {os.path.getsize(icon_path)} bytes")
-            except Exception as e:
-                logging.warning(f"SourceScreen: Failed to get file size for {icon_path}: {e}")
+            logging.debug(f"SourceScreen: Loaded custom icon for {action}: {icon_path}, size: 112x112px")
         else:
             button.setIcon(self.widget.style().standardIcon(qt_icon))
-            logging.warning(f"SourceScreen: Custom icon not found for {action}: {icon_path}, using Qt icon {qt_icon}, size: 112x112px")
+            logging.warning(f"SourceScreen: Custom icon not found for {action}: {icon_path}, using Qt icon")
         button.setStyleSheet(f"""
             QPushButton {{
                 background: {color};
