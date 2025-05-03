@@ -18,7 +18,7 @@
 # - schedule_dialog.py, utilities.py.
 
 from PyQt5.QtWidgets import QWidget
-import logging, os
+import logging
 from source_screen_ui import setup_ui
 from source_screen_outputs import update_output_button_style, toggle_output
 from source_screen_handlers import file_selected, open_schedule_dialog, update_sync_status, update_playback_state

@@ -2,38 +2,21 @@
 #
 # Overview:
 # This file defines the KioskGUI class, the primary PyQt5 application window for a media kiosk
-# running on a Raspberry Pi 5 with X11 (QT_QPA_PLATFORM=xcb). The application provides a
-# touchscreen interface (787x492px window, mimicking a 10" display on a 24" 1920x1080 monitor)
+# running on a Raspberry Pi 5 with X11. The application provides a touchscreen interface
 # for managing media playback (via mpv), network share syncing, and scheduling. It handles
 # source selection (e.g., Local Files, Web, Cast), and navigation between screens.
 #
-# Key Functionality:
-# - Initializes a fixed-size main window (787x492px, gradient background) with a QStackedWidget
-#   for screen navigation.
-# - Manages source screens (e.g., Local Files: 30pt title, 20pt fonts, 2/3 file listbox,
-#   1/3 TV outputs with yellow #f1c40f text) via show_source_screen.
-# - Coordinates playback (via playback.py), network sync (via utilities.py), and scheduling
-#   (via schedule library and schedule_dialog.py).
-# - Maintains state: input_map (source-to-input mapping), input_paths (input-to-file/URL),
-#   input_output_map (input-to-outputs), active_inputs (playback status), media_processes (mpv PIDs).
-#
-# Environment:
-# - Raspberry Pi 5, X11, PyQt5, mpv for playback.
-# - Logs: /home/admin/gui/logs/kiosk.log (app), /home/admin/gui/logs/mpv.log (mpv output),
-#   /home/admin/gui/logs/mpv_err.log (mpv errors).
-# - Videos: /home/admin/videos (local), /mnt/share (network share), /mnt/usb (USB storage).
-# - Icons: /home/admin/gui/icons (64x64px for sources/playback, 61x61px for buttons, 32x32px for back).
-#
 # Recent Changes (as of June 2025):
 # - Temporarily disabled authentication to bypass PIN prompt.
-# - Added missing import os for directory creation and environment settings.
+# - Added missing import os.
+# - Extracted hardcoded values to config.py.
 #
 # Dependencies:
 # - PyQt5: GUI framework.
 # - schedule: Task scheduling.
 # - mpv: Media playback (external binary).
 # - Files: interface.py, playback.py, output_dialog.py, source_screen.py,
-#   utilities.py, schedule_dialog.py.
+#   utilities.py, schedule_dialog.py, config.py.
 
 import sys
 import os
@@ -46,6 +29,7 @@ from PyQt5.QtCore import Qt, QtMsgType, QTimer
 from interface import Interface
 from playback import Playback
 from utilities import signal_handler, run_scheduler, load_schedule, SyncNetworkShare
+from config import LOG_DIR, LOG_FILE, VIDEO_DIR, ICON_DIR, INPUTS, WINDOW_SIZE, QT_PLATFORM, MAIN_WINDOW_GRADIENT, LABEL_COLOR
 
 # Custom Qt message handler to log Qt messages
 def qt_message_handler(msg_type, context, msg):
@@ -61,16 +45,16 @@ def qt_message_handler(msg_type, context, msg):
 
 # Set up logging
 logging.basicConfig(
-    filename="/home/admin/gui/logs/kiosk.log",
+    filename=LOG_FILE,
     level=logging.DEBUG,
     format="%(asctime)s %(levelname)s: %(message)s"
 )
 
 # Ensure required directories
 try:
-    os.makedirs("/home/admin/gui/logs", exist_ok=True)
-    os.makedirs("/home/admin/videos", exist_ok=True)
-    os.makedirs("/home/admin/gui/icons", exist_ok=True)
+    os.makedirs(LOG_DIR, exist_ok=True)
+    os.makedirs(VIDEO_DIR, exist_ok=True)
+    os.makedirs(ICON_DIR, exist_ok=True)
 except Exception as e:
     logging.error(f"Failed to create directories: {e}")
     sys.exit(1)
@@ -85,26 +69,21 @@ class KioskGUI(QMainWindow):
         logging.debug("Initializing KioskGUI")
         try:
             self.setWindowTitle("Media Kiosk")
-            self.setFixedSize(787, 492)
-            self.setStyleSheet("""
-                QMainWindow {
+            self.setFixedSize(*WINDOW_SIZE)
+            self.setStyleSheet(f"""
+                QMainWindow {{
                     background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                                                stop:0 #2c3e50, stop:1 #34495e);
-                }
-                QLabel {
-                    color: white;
-                }
+                                                stop:0 {MAIN_WINDOW_GRADIENT[0]}, stop:1 {MAIN_WINDOW_GRADIENT[1]});
+                }}
+                QLabel {{
+                    color: {LABEL_COLOR};
+                }}
             """)
             self.stack = QStackedWidget()
             self.setCentralWidget(self.stack)
             self.source_screens = []
 
-            self.input_map = {
-                "Local Files": 2,
-                "Audio": 1,
-                "DVD": 3,
-                "Web": 4
-            }
+            self.input_map = {name: info["input_num"] for name, info in INPUTS.items()}
             self.input_paths = {}
             self.input_output_map = {}
             self.active_inputs = {}
@@ -193,7 +172,7 @@ class KioskGUI(QMainWindow):
 if __name__ == '__main__':
     try:
         logging.debug("Starting application")
-        os.environ["QT_QPA_PLATFORM"] = "xcb"
+        os.environ["QT_QPA_PLATFORM"] = QT_PLATFORM
         app = QApplication(sys.argv)
         from PyQt5.QtCore import qInstallMessageHandler
         qInstallMessageHandler(qt_message_handler)

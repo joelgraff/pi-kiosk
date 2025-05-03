@@ -6,60 +6,69 @@
 #
 # Recent Changes (as of June 2025):
 # - Fixed 'setAlignment' error on Back button using QHBoxLayout.
-# - Schedule button: Moved to left layout, text "Schedule...", 180x60px, no icon.
-# - TV outputs: Two layouts (Fellowship 1/Nursery, Fellowship 2/Sanctuary), 180x60px.
-# - Back button: Upper right, 80x40px, right-aligned via layout.
-# - TV label: "TV", 28pt, white, centered.
-# - File list: 260px, added 20px spacing to right layout.
+# - Extracted hardcoded values to config.py.
+#
+# Dependencies:
+# - config.py: Filepaths, TV outputs, UI constants.
 
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QListWidget, QLabel, QPushButton, QStyle
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont, QIcon
 import logging
 import os
+from config import (
+    VIDEO_DIR, ICON_DIR, ICON_FILES, TV_OUTPUTS, SOURCE_SCREEN_BACKGROUND,
+    TITLE_FONT, WIDGET_FONT, BACK_BUTTON_FONT, TEXT_COLOR, FILE_LIST_BORDER_COLOR,
+    SCHEDULE_BUTTON_COLOR, PLAY_BUTTON_COLOR, STOP_BUTTON_COLOR, SYNC_STATUS_COLOR,
+    PLAYBACK_STATUS_COLORS, BACK_BUTTON_COLOR, FILE_LIST_HEIGHT, FILE_LIST_ITEM_HEIGHT,
+    SCHEDULE_BUTTON_SIZE, OUTPUT_BUTTON_SIZE, PLAY_STOP_BUTTON_SIZE, BACK_BUTTON_SIZE,
+    ICON_SIZE, MAIN_LAYOUT_SPACING, TOP_LAYOUT_SPACING, OUTPUTS_CONTAINER_SPACING,
+    OUTPUT_LAYOUT_SPACING, BUTTONS_LAYOUT_SPACING, RIGHT_LAYOUT_SPACING,
+    BUTTON_PADDING, FILE_LIST_PADDING, BORDER_RADIUS
+)
 
 def setup_ui(self):
     logging.debug(f"SourceScreen: Setting up UI for {self.source_name}")
     main_layout = QVBoxLayout(self.widget)
-    main_layout.setContentsMargins(20, 20, 20, 20)
-    main_layout.setSpacing(20)
+    main_layout.setContentsMargins(MAIN_LAYOUT_SPACING, MAIN_LAYOUT_SPACING, MAIN_LAYOUT_SPACING, MAIN_LAYOUT_SPACING)
+    main_layout.setSpacing(MAIN_LAYOUT_SPACING)
     
     # Top layout: File list and outputs/buttons (1/2 vs. 1/2)
     top_layout = QHBoxLayout()
-    top_layout.setSpacing(20)
+    top_layout.setSpacing(TOP_LAYOUT_SPACING)
     
     # Left side: File list and Schedule button
     left_layout = QVBoxLayout()
     title = QLabel(self.source_name)
-    title.setFont(QFont("Arial", 28, QFont.Bold))
-    title.setStyleSheet("color: #ffffff; background: transparent;")
+    title.setFont(QFont(*TITLE_FONT))
+    title.setStyleSheet(f"color: {TEXT_COLOR}; background: transparent;")
     left_layout.addWidget(title)
     
     self.file_list = QListWidget()
-    self.file_list.setFont(QFont("Arial", 20))
-    self.file_list.setFixedHeight(260)
-    self.file_list.setStyleSheet("""
-        QListWidget {
-            color: #ffffff;
-            background: #2a3b5e;
-            border: 2px solid #ffffff;
-            border-radius: 8px;
-        }
-        QListWidget::item { height: 60px; padding: 5px; }
+    self.file_list.setFont(QFont(*WIDGET_FONT))
+    self.file_list.setFixedHeight(FILE_LIST_HEIGHT)
+    self.file_list.setStyleSheet(f"""
+        QListWidget {{
+            color: {TEXT_COLOR};
+            background: {SOURCE_SCREEN_BACKGROUND};
+            border: 2px solid {FILE_LIST_BORDER_COLOR};
+            border-radius: {BORDER_RADIUS}px;
+        }}
+        QListWidget::item {{ height: {FILE_LIST_ITEM_HEIGHT}px; padding: {FILE_LIST_PADDING}px; }}
     """)
     self.file_list.itemClicked.connect(self.file_selected)
     left_layout.addWidget(self.file_list)
     
     schedule_button = QPushButton("Schedule...")
-    schedule_button.setFont(QFont("Arial", 20))
-    schedule_button.setFixedSize(180, 60)
-    schedule_button.setStyleSheet("""
-        QPushButton {
-            background: #4caf50;
-            color: #ffffff;
-            border-radius: 8px;
-            padding: 10px;
-        }
+    schedule_button.setFont(QFont(*WIDGET_FONT))
+    schedule_button.setFixedSize(*SCHEDULE_BUTTON_SIZE)
+    schedule_button.setStyleSheet(f"""
+        QPushButton {{
+            background: {SCHEDULE_BUTTON_COLOR};
+            color: {TEXT_COLOR};
+            border-radius: {BORDER_RADIUS}px;
+            padding: {BUTTON_PADDING['schedule_output']}px;
+        }}
     """)
     schedule_button.clicked.connect(self.open_schedule_dialog)
     left_layout.addWidget(schedule_button)
@@ -70,15 +79,15 @@ def setup_ui(self):
     # Right side: Back button, TV label, outputs, and buttons
     right_layout = QVBoxLayout()
     back_button = QPushButton("Back")
-    back_button.setFont(QFont("Arial", 16))
-    back_button.setFixedSize(80, 40)
-    back_button.setStyleSheet("""
-        QPushButton {
-            background: #7f8c8d;
-            color: #ffffff;
-            border-radius: 8px;
-            padding: 5px;
-        }
+    back_button.setFont(QFont(*BACK_BUTTON_FONT))
+    back_button.setFixedSize(*BACK_BUTTON_SIZE)
+    back_button.setStyleSheet(f"""
+        QPushButton {{
+            background: {BACK_BUTTON_COLOR};
+            color: {TEXT_COLOR};
+            border-radius: {BORDER_RADIUS}px;
+            padding: {BUTTON_PADDING['back']}px;
+        }}
     """)
     back_button_layout = QHBoxLayout()
     back_button_layout.addStretch()
@@ -86,31 +95,26 @@ def setup_ui(self):
     right_layout.addLayout(back_button_layout)
     
     outputs_label = QLabel("TV")
-    outputs_label.setFont(QFont("Arial", 28, QFont.Bold))
-    outputs_label.setStyleSheet("color: #ffffff; background: transparent;")
+    outputs_label.setFont(QFont(*TITLE_FONT))
+    outputs_label.setStyleSheet(f"color: {TEXT_COLOR}; background: transparent;")
     outputs_label.setAlignment(Qt.AlignCenter)
     right_layout.addWidget(outputs_label)
     
     # Outputs: Two columns (Fellowship 1/Nursery, Fellowship 2/Sanctuary)
     outputs_container = QHBoxLayout()
-    outputs_container.setSpacing(10)
+    outputs_container.setSpacing(OUTPUTS_CONTAINER_SPACING)
     
     outputs_left_layout = QVBoxLayout()
-    outputs_left_layout.setSpacing(5)
+    outputs_left_layout.setSpacing(OUTPUT_LAYOUT_SPACING)
     outputs_right_layout = QVBoxLayout()
-    outputs_right_layout.setSpacing(5)
+    outputs_right_layout.setSpacing(OUTPUT_LAYOUT_SPACING)
     
-    self.output_buttons = {
-        "Fellowship 1": QPushButton("Fellowship 1"),
-        "Nursery": QPushButton("Nursery"),
-        "Fellowship 2": QPushButton("Fellowship 2"),
-        "Sanctuary": QPushButton("Sanctuary")
-    }
+    self.output_buttons = {name: QPushButton(name) for name in TV_OUTPUTS}
     for name, button in self.output_buttons.items():
-        button.setFont(QFont("Arial", 20))
-        button.setFixedSize(180, 60)
+        button.setFont(QFont(*WIDGET_FONT))
+        button.setFixedSize(*OUTPUT_BUTTON_SIZE)
         button.setCheckable(True)
-        output_idx = {"Fellowship 1": 1, "Fellowship 2": 2, "Nursery": 3, "Sanctuary": 4}[name]
+        output_idx = TV_OUTPUTS[name]
         is_current = 2 in self.parent.input_output_map and output_idx in self.parent.input_output_map.get(2, [])
         is_other = any(other_input != 2 and output_idx in self.parent.input_output_map.get(other_input, []) and self.parent.active_inputs.get(other_input, False) for other_input in self.parent.input_output_map)
         self.update_output_button_style(name, is_current, is_other)
@@ -123,22 +127,22 @@ def setup_ui(self):
     outputs_container.addLayout(outputs_left_layout)
     outputs_container.addLayout(outputs_right_layout)
     right_layout.addLayout(outputs_container)
-    right_layout.addSpacing(20)
+    right_layout.addSpacing(RIGHT_LAYOUT_SPACING)
     
     # Play/Stop buttons (horizontal)
     buttons_layout = QHBoxLayout()
-    buttons_layout.setSpacing(15)
+    buttons_layout.setSpacing(BUTTONS_LAYOUT_SPACING)
     for action, icon, color, qt_icon in [
-        ("Play", "play.png", "#4caf50", QStyle.SP_MediaPlay),
-        ("Stop", "stop.png", "#e53935", QStyle.SP_MediaStop)
+        ("Play", ICON_FILES["play"], PLAY_BUTTON_COLOR, QStyle.SP_MediaPlay),
+        ("Stop", ICON_FILES["stop"], STOP_BUTTON_COLOR, QStyle.SP_MediaStop)
     ]:
         button = QPushButton()
-        button.setFixedSize(120, 120)
-        button.setFont(QFont("Arial", 20))
-        icon_path = f"/home/admin/kiosk/gui/icons/{icon}"
+        button.setFixedSize(*PLAY_STOP_BUTTON_SIZE)
+        button.setFont(QFont(*WIDGET_FONT))
+        icon_path = os.path.join(ICON_DIR, icon)
         if os.path.exists(icon_path):
             button.setIcon(QIcon(icon_path))
-            button.setIconSize(QSize(112, 112))
+            button.setIconSize(QSize(*ICON_SIZE))
             logging.debug(f"SourceScreen: Loaded custom icon for {action}: {icon_path}")
         else:
             button.setIcon(self.widget.style().standardIcon(qt_icon))
@@ -146,10 +150,10 @@ def setup_ui(self):
         button.setStyleSheet(f"""
             QPushButton {{
                 background: {color};
-                color: #ffffff;
-                border-radius: 8px;
-                padding: 2px;
-                icon-size: 112px;
+                color: {TEXT_COLOR};
+                border-radius: {BORDER_RADIUS}px;
+                padding: {BUTTON_PADDING['play_stop']}px;
+                icon-size: {ICON_SIZE[0]}px;
             }}
         """)
         if action == "Play":
@@ -168,18 +172,18 @@ def setup_ui(self):
     # Bottom layout: Status messages
     bottom_layout = QHBoxLayout()
     self.sync_status_label = QLabel("Sync: Idle")
-    self.sync_status_label.setFont(QFont("Arial", 20, QFont.Bold))
-    self.sync_status_label.setStyleSheet("color: #ffc107; background: transparent;")
+    self.sync_status_label.setFont(QFont(*WIDGET_FONT))
+    self.sync_status_label.setStyleSheet(f"color: {SYNC_STATUS_COLOR}; background: transparent;")
     bottom_layout.addWidget(self.sync_status_label)
     
     bottom_layout.addStretch()
     
     self.playback_state_label = QLabel("Playback: Stopped")
-    self.playback_state_label.setFont(QFont("Arial", 20, QFont.Bold))
-    self.playback_state_label.setStyleSheet("color: #e53935;")
+    self.playback_state_label.setFont(QFont(*WIDGET_FONT))
+    self.playback_state_label.setStyleSheet(f"color: {PLAYBACK_STATUS_COLORS['stopped']};")
     bottom_layout.addWidget(self.playback_state_label)
     
     main_layout.addLayout(bottom_layout)
     
-    self.widget.setStyleSheet("QWidget { background: #2a3b5e; }")
+    self.widget.setStyleSheet(f"QWidget {{ background: {SOURCE_SCREEN_BACKGROUND}; }}")
     logging.debug("SourceScreen: UI setup completed")

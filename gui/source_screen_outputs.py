@@ -1,50 +1,40 @@
 # source_screen_outputs.py: Output button styling and toggling for SourceScreen
 #
 # Overview:
-# Defines functions to style and toggle TV output buttons (Fellowship 1, Fellowship 2, Nursery, Sanctuary).
+# Defines functions to style and toggle TV output buttons.
 #
-# Recent Changes (as of May 2025):
-# - Added Sanctuary output, organized in two layouts.
+# Recent Changes (as of June 2025):
+# - Extracted hardcoded values to config.py.
+#
+# Dependencies:
+# - config.py: TV outputs, colors, UI constants.
 
 from PyQt5.QtWidgets import QPushButton
 import logging
+from config import TV_OUTPUTS, OUTPUT_BUTTON_COLORS, BORDER_RADIUS, BUTTON_PADDING, LOCAL_FILES_INPUT_NUM
 
 def update_output_button_style(self, name, is_current, is_other):
     button = self.output_buttons[name]
     button.setText(name)  # Static text
     if is_current:
-        button.setStyleSheet("""
-            QPushButton {
-                background: #1f618d;
-                color: white;
-                border-radius: 8px;
-                padding: 10px;
-            }
-        """)
+        color = OUTPUT_BUTTON_COLORS["selected"]
     elif is_other:
-        button.setStyleSheet("""
-            QPushButton {
-                background: #c0392b;
-                color: white;
-                border-radius: 8px;
-                padding: 10px;
-            }
-        """)
+        color = OUTPUT_BUTTON_COLORS["other"]
     else:
-        button.setStyleSheet("""
-            QPushButton {
-                background: #7f8c8d;
-                color: white;
-                border-radius: 8px;
-                padding: 10px;
-            }
-        """)
+        color = OUTPUT_BUTTON_COLORS["unselected"]
+    button.setStyleSheet(f"""
+        QPushButton {{
+            background: {color};
+            color: white;
+            border-radius: {BORDER_RADIUS}px;
+            padding: {BUTTON_PADDING['schedule_output']}px;
+        }}
+    """)
     button.setChecked(is_current or is_other)
 
 def toggle_output(self, tv_name, checked):
-    output_map = {"Fellowship 1": 1, "Fellowship 2": 2, "Nursery": 3, "Sanctuary": 4}
-    output_idx = output_map[tv_name]
-    input_num = 2  # Local Files
+    output_idx = TV_OUTPUTS[tv_name]
+    input_num = LOCAL_FILES_INPUT_NUM
     if checked:
         if input_num not in self.parent.input_output_map:
             self.parent.input_output_map[input_num] = []
