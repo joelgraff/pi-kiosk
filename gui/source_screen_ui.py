@@ -1,0 +1,194 @@
+# source_screen_ui.py: UI setup for SourceScreen
+#
+# Overview:
+# Defines the setup_ui function to create the Local Files screen layout.
+# Includes file list, TV output toggles, Play/Stop/Schedule buttons, Back button, and status labels.
+#
+# Recent Changes (as of May 2025):
+# - Buttons: 120x120px (Play/Stop), 200x60px (Schedule), 180x60px (outputs).
+# - Moved Schedule button to left layout, text "Schedule...", no icon.
+# - Added Sanctuary output, split into two layouts (Fellowship 1/Nursery, Fellowship 2/Sanctuary).
+# - Added Back button (upper right, 100x40px).
+# - Changed "TVs" to "TV", 28pt, white.
+# - File list height: 280px for balance.
+
+from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QListWidget, QLabel, QPushButton, QStyle
+from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtGui import QFont, QIcon
+import logging
+import os
+
+def setup_ui(self):
+    logging.debug(f"SourceScreen: Setting up UI for {self.source_name}")
+    main_layout = QVBoxLayout(self.widget)
+    main_layout.setContentsMargins(20, 20, 20, 20)
+    main_layout.setSpacing(20)
+    
+    # Top layout: File list and outputs/buttons (1/2 vs. 1/2)
+    top_layout = QHBoxLayout()
+    top_layout.setSpacing(20)
+    
+    # Left side: File list and Schedule button
+    left_layout = QVBoxLayout()
+    title = QLabel(self.source_name)
+    title.setFont(QFont("Arial", 28, QFont.Bold))
+    title.setStyleSheet("color: #ffffff; background: transparent;")
+    left_layout.addWidget(title)
+    
+    self.file_list = QListWidget()
+    self.file_list.setFont(QFont("Arial", 20))
+    self.file_list.setFixedHeight(280)  # Reduced for Schedule button
+    self.file_list.setStyleSheet("""
+        QListWidget {
+            color: #ffffff;
+            background: #2a3b5e;
+            border: 2px solid #ffffff;
+            border-radius: 8px;
+        }
+        QListWidget::item { height: 60px; padding: 5px; }
+    """)
+    self.file_list.itemClicked.connect(self.file_selected)
+    left_layout.addWidget(self.file_list)
+    
+    schedule_button = QPushButton("Schedule...")
+    schedule_button.setFont(QFont("Arial", 20))
+    schedule_button.setFixedSize(200, 60)
+    schedule_button.setStyleSheet("""
+        QPushButton {
+            background: #4caf50;
+            color: #ffffff;
+            border-radius: 8px;
+            padding: 10px;
+        }
+    """)
+    schedule_button.clicked.connect(self.open_schedule_dialog)
+    left_layout.addWidget(schedule_button)
+    left_layout.addStretch()
+    
+    top_layout.addLayout(left_layout, 1)
+    
+    # Right side: Back button, TV label, outputs, and buttons
+    right_layout = QVBoxLayout()
+    back_button = QPushButton("Back")
+    back_button.setFont(QFont("Arial", 16))
+    back_button.setFixedSize(100, 40)
+    back_button.setStyleSheet("""
+        QPushButton {
+            background: #7f8c8d;
+            color: #ffffff;
+            border-radius: 8px;
+            padding: 5px;
+        }
+    """)
+    back_button.setAlignment(Qt.AlignRight)
+    back_button.clicked.connect(lambda: self.parent.show_main_menu())
+    right_layout.addWidget(back_button)
+    
+    outputs_label = QLabel("TV")
+    outputs_label.setFont(QFont("Arial", 28, QFont.Bold))
+    outputs_label.setStyleSheet("color: #ffffff; background: transparent;")
+    outputs_label.setAlignment(Qt.AlignCenter)
+    right_layout.addWidget(outputs_label)
+    
+    # Outputs: Two columns (Fellowship 1/Nursery, Fellowship 2/Sanctuary)
+    outputs_container = QHBoxLayout()
+    outputs_container.setSpacing(10)
+    
+    outputs_left_layout = QVBoxLayout()
+    outputs_left_layout.setSpacing(5)
+    outputs_right_layout = QVBoxLayout()
+    outputs_right_layout.setSpacing(5)
+    
+    self.output_buttons = {
+        "Fellowship 1": QPushButton("Fellowship 1"),
+        "Nursery": QPushButton("Nursery"),
+        "Fellowship 2": QPushButton("Fellowship 2"),
+        "Sanctuary": QPushButton("Sanctuary")
+    }
+    for name, button in self.output_buttons.items():
+        button.setFont(QFont("Arial", 20))
+        button.setFixedSize(180, 60)
+        button.setCheckable(True)
+        output_idx = {"Fellowship 1": 1, "Fellowship 2": 2, "Nursery": 3, "Sanctuary": 4}[name]
+        is_current = 2 in self.parent.input_output_map and output_idx in self.parent.input_output_map.get(2, [])
+        is_other = any(other_input != 2 and output_idx in self.parent.input_output_map.get(other_input, []) and self.parent.active_inputs.get(other_input, False) for other_input in self.parent.input_output_map)
+        self.update_output_button_style(name, is_current, is_other)
+        button.clicked.connect(lambda checked, n=name: self.toggle_output(n, checked))
+        if name in ["Fellowship 1", "Nursery"]:
+            outputs_left_layout.addWidget(button)
+        else:
+            outputs_right_layout.addWidget(button)
+    
+    outputs_container.addLayout(outputs_left_layout)
+    outputs_container.addLayout(outputs_right_layout)
+    right_layout.addLayout(outputs_container)
+    
+    # Play/Stop buttons (horizontal)
+    buttons_layout = QHBoxLayout()
+    buttons_layout.setSpacing(15)
+    for action, icon, color, qt_icon in [
+        ("Play", "play.png", "#4caf50", QStyle.SP_MediaPlay),
+        ("Stop", "stop.png", "#e53935", QStyle.SP_MediaStop)
+    ]:
+        button = QPushButton()
+        button.setFixedSize(120, 120)
+        button.setFont(QFont("Arial", 20))
+        icon_path = f"/home/admin/kiosk/gui/icons/{icon}"
+        icon_dir = "/home/admin/kiosk/gui/icons"
+        if not os.path.exists(icon_dir):
+            logging.error(f"Icon directory not found: {icon_dir}")
+        else:
+            try:
+                logging.debug(f"SourceScreen: Icon directory contents: {os.listdir(icon_dir)}")
+            except Exception as e:
+                logging.warning(f"SourceScreen: Failed to list icon directory {icon_dir}: {e}")
+        if os.path.exists(icon_path):
+            button.setIcon(QIcon(icon_path))
+            button.setIconSize(QSize(112, 112))
+            try:
+                logging.debug(f"SourceScreen: Loaded custom icon for {action}: {icon_path}, size: 112x112px, file_size: {os.path.getsize(icon_path)} bytes")
+            except Exception as e:
+                logging.warning(f"SourceScreen: Failed to get file size for {icon_path}: {e}")
+        else:
+            button.setIcon(self.widget.style().standardIcon(qt_icon))
+            logging.warning(f"SourceScreen: Custom icon not found for {action}: {icon_path}, using Qt icon {qt_icon}, size: 112x112px")
+        button.setStyleSheet(f"""
+            QPushButton {{
+                background: {color};
+                color: #ffffff;
+                border-radius: 8px;
+                padding: 2px;
+                icon-size: 112px;
+            }}
+        """)
+        if action == "Play":
+            self.play_button = button
+            button.clicked.connect(lambda: self.parent.playback.toggle_play_pause(self.source_name))
+        elif action == "Stop":
+            button.clicked.connect(lambda: self.parent.playback.stop_input(2))
+        buttons_layout.addWidget(button)
+    
+    right_layout.addLayout(buttons_layout)
+    right_layout.addStretch()
+    top_layout.addLayout(right_layout, 1)
+    
+    main_layout.addLayout(top_layout)
+    
+    # Bottom layout: Status messages
+    bottom_layout = QHBoxLayout()
+    self.sync_status_label = QLabel("Sync: Idle")
+    self.sync_status_label.setFont(QFont("Arial", 20, QFont.Bold))
+    self.sync_status_label.setStyleSheet("color: #ffc107; background: transparent;")
+    bottom_layout.addWidget(self.sync_status_label)
+    
+    bottom_layout.addStretch()
+    
+    self.playback_state_label = QLabel("Playback: Stopped")
+    self.playback_state_label.setFont(QFont("Arial", 20, QFont.Bold))
+    self.playback_state_label.setStyleSheet("color: #e53935;")
+    bottom_layout.addWidget(self.playback_state_label)
+    
+    main_layout.addLayout(bottom_layout)
+    
+    self.widget.setStyleSheet("QWidget { background: #2a3b5e; }")
+    logging.debug("SourceScreen: UI setup completed")
