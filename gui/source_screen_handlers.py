@@ -6,6 +6,9 @@
 # Recent Changes (as of May 2025):
 # - Updated Schedule button to text-based in left layout.
 
+from PyQt5.QtWidgets import QStyle
+from PyQt5.QtCore import QSize
+from PyQt5.QtGui import QIcon
 from schedule_dialog import ScheduleDialog
 import logging
 import os

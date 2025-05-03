@@ -5,12 +5,11 @@
 # Includes file list, TV output toggles, Play/Stop/Schedule buttons, Back button, and status labels.
 #
 # Recent Changes (as of May 2025):
-# - Buttons: 120x120px (Play/Stop), 200x60px (Schedule), 180x60px (outputs).
-# - Moved Schedule button to left layout, text "Schedule...", no icon.
-# - Added Sanctuary output, split into two layouts (Fellowship 1/Nursery, Fellowship 2/Sanctuary).
-# - Added Back button (upper right, 100x40px).
-# - Changed "TVs" to "TV", 28pt, white.
-# - File list height: 280px for balance.
+# - Schedule button: Moved to left layout, text "Schedule...", 180x60px, no icon.
+# - TV outputs: Added Sanctuary, two layouts (Fellowship 1/Nursery, Fellowship 2/Sanctuary), 180x60px.
+# - Back button: Upper right, 80x40px.
+# - TV label: "TV", 28pt, white, centered.
+# - File list: 260px for balance, added spacing to right layout.
 
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QListWidget, QLabel, QPushButton, QStyle
 from PyQt5.QtCore import Qt, QSize
@@ -37,7 +36,7 @@ def setup_ui(self):
     
     self.file_list = QListWidget()
     self.file_list.setFont(QFont("Arial", 20))
-    self.file_list.setFixedHeight(280)  # Reduced for Schedule button
+    self.file_list.setFixedHeight(260)  # Reduced for balance
     self.file_list.setStyleSheet("""
         QListWidget {
             color: #ffffff;
@@ -52,7 +51,7 @@ def setup_ui(self):
     
     schedule_button = QPushButton("Schedule...")
     schedule_button.setFont(QFont("Arial", 20))
-    schedule_button.setFixedSize(200, 60)
+    schedule_button.setFixedSize(180, 60)
     schedule_button.setStyleSheet("""
         QPushButton {
             background: #4caf50;
@@ -71,7 +70,7 @@ def setup_ui(self):
     right_layout = QVBoxLayout()
     back_button = QPushButton("Back")
     back_button.setFont(QFont("Arial", 16))
-    back_button.setFixedSize(100, 40)
+    back_button.setFixedSize(80, 40)
     back_button.setStyleSheet("""
         QPushButton {
             background: #7f8c8d;
@@ -122,6 +121,7 @@ def setup_ui(self):
     outputs_container.addLayout(outputs_left_layout)
     outputs_container.addLayout(outputs_right_layout)
     right_layout.addLayout(outputs_container)
+    right_layout.addSpacing(20)  # Balance height
     
     # Play/Stop buttons (horizontal)
     buttons_layout = QHBoxLayout()

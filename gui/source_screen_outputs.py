@@ -4,10 +4,10 @@
 # Defines functions to style and toggle TV output buttons (Fellowship 1, Fellowship 2, Nursery, Sanctuary).
 #
 # Recent Changes (as of May 2025):
-# - Removed "(Selected)" and "(Other Input)" text, using static names.
 # - Added Sanctuary output, organized in two layouts.
 
 from PyQt5.QtWidgets import QPushButton
+import logging
 
 def update_output_button_style(self, name, is_current, is_other):
     button = self.output_buttons[name]

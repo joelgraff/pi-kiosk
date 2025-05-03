@@ -1,0 +1,10 @@
+# requirements.txt: Dependencies for the media kiosk project
+#
+# Overview:
+# Lists Python packages required for the kiosk application on Raspberry Pi 5.
+#
+# Dependencies:
+# - PyQt5: GUI framework for the application.
+# - python3-stdlib (logging, os): Assumed available in Python 3.
+
+PyQt5==5.15.9
