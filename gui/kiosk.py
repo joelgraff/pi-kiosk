@@ -25,7 +25,8 @@
 # - Icons: /home/admin/gui/icons (64x64px for sources/playback, 61x61px for buttons, 32x32px for back).
 #
 # Recent Changes (as of June 2025):
-# - Temporarily disabled authentication to bypass PIN prompt, directly showing controls.
+# - Temporarily disabled authentication to bypass PIN prompt.
+# - Added missing import os for directory creation and environment settings.
 #
 # Dependencies:
 # - PyQt5: GUI framework.
@@ -127,7 +128,6 @@ class KioskGUI(QMainWindow):
             self.scheduler_thread.start()
             self.load_and_apply_schedule()
 
-            # Directly show controls, bypassing auth_dialog
             QTimer.singleShot(0, self.show_controls)
         except Exception as e:
             logging.error(f"Initialization failed: {e}")
@@ -149,7 +149,6 @@ class KioskGUI(QMainWindow):
             self.stack.setCurrentWidget(self.interface.main_widget)
             self.show()
             logging.debug("Controls displayed")
-            # Start network share sync
             sync_thread = threading.Thread(target=self.sync_manager.sync, daemon=True)
             sync_thread.start()
         except Exception as e:

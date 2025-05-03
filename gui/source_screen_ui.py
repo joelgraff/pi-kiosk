@@ -139,10 +139,10 @@ def setup_ui(self):
         if os.path.exists(icon_path):
             button.setIcon(QIcon(icon_path))
             button.setIconSize(QSize(112, 112))
-            logging.debug(f"SourceScreen: Loaded custom icon for {action}: {icon_path}, size: 112x112px")
+            logging.debug(f"SourceScreen: Loaded custom icon for {action}: {icon_path}")
         else:
             button.setIcon(self.widget.style().standardIcon(qt_icon))
-            logging.warning(f"SourceScreen: Custom icon not found for {action}: {icon_path}, using Qt icon")
+            logging.warning(f"SourceScreen: Custom icon not found for {action}: {icon_path}")
         button.setStyleSheet(f"""
             QPushButton {{
                 background: {color};
