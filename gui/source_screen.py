@@ -5,14 +5,14 @@
 # Raspberry Pi 5 with X11. The SourceScreen class is a PyQt5 QWidget for displaying
 # source-specific interfaces (e.g., Local Files, 787x492px) with a 28pt title, 20pt fonts,
 # 1/2 width file listbox (300px height), 1/2 width TV outputs toggle buttons (200x60px, vivid
-# yellow #ffc107 text), and horizontal Play/Stop/Schedule buttons (160x160px, icons only).
+# yellow #ffc107 text), and horizontal Play/Stop/Schedule buttons (120x120px, icons only).
 # Sync/playback status span the full width at the bottom in a horizontal layout.
 #
 # Key Functionality:
 # - Displays a file listbox (300px height) for /home/admin/videos (Local Files).
 # - Shows toggle buttons for selecting TV outputs (Fellowship 1, Fellowship 2, Nursery).
 # - Places sync and playback status in a horizontal layout at the bottom (full width).
-# - Provides Play, Stop, Schedule buttons (160x160px, 152x152px icons only).
+# - Provides Play, Stop, Schedule buttons (120x120px, 112x112px icons only).
 # - Updates KioskGUI.input_paths and input_output_map based on selections.
 #
 # Environment:
@@ -27,7 +27,7 @@
 # - Default to Fellowship 1 (output 1) if no outputs selected (implement in playback.py).
 #
 # Recent Changes (as of May 2025):
-# - Revamped UI: 160x160px icon-only buttons, 28pt/20pt fonts, 1/2 vs. 1/2 layout.
+# - Revamped UI: 120x120px icon-only buttons, 28pt/20pt fonts, 1/2 vs. 1/2 layout.
 # - Added sync/playback status in horizontal layout at bottom (full width).
 # - Replaced Select Outputs button with toggle buttons in outputs list.
 # - Fixed alignment: Shortened file list (300px), horizontal buttons, removed text.
@@ -35,9 +35,11 @@
 # - Fixed AttributeError: Changed self.style() to self.widget.style() for Qt icons.
 # - Fixed file list: Case-insensitive extensions, added logging.
 # - Removed gradient backgrounds, used solid #2a3b5e.
-# - Buttons now 160x160px, horizontal layout, 30px spacing.
-# - Fixed icon path to /home/admin/kiosk/gui/icons, icon size 152x152px, padding 2px.
+# - Fixed icon path to /home/admin/kiosk/gui/icons, icon size 152x152px, buttons 160x160px.
 # - Fixed error: Replaced Qt.Size with QSize for setIconSize.
+# - Reduced button size to 120x120px, icon size to 112x112px, spacing to 15px for 50/50 split.
+# - Removed "(Selected)" and "(Other Input)" from output buttons, using colors for state.
+# - Changed "Select Outputs:" to "TVs" and centered it.
 #
 # Known Considerations:
 # - File listbox shows only .mp4/.mkv files (case-insensitive); verify /home/admin/videos.
@@ -122,9 +124,10 @@ class SourceScreen:
         
         # Right side: TV outputs and buttons (1/2 width)
         right_layout = QVBoxLayout()
-        outputs_label = QLabel("Select Outputs:")
+        outputs_label = QLabel("TVs")
         outputs_label.setFont(QFont("Arial", 20, QFont.Bold))
         outputs_label.setStyleSheet("color: #ffc107; background: transparent;")
+        outputs_label.setAlignment(Qt.AlignCenter)
         right_layout.addWidget(outputs_label)
         
         # Outputs toggle buttons
@@ -150,14 +153,14 @@ class SourceScreen:
         
         # Play/Stop/Schedule buttons (horizontal)
         buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(30)  # Increased for larger buttons
+        buttons_layout.setSpacing(15)  # Reduced for smaller buttons
         for action, icon, color, qt_icon in [
             ("Play", "play.png", "#4caf50", QStyle.SP_MediaPlay),
             ("Stop", "stop.png", "#e53935", QStyle.SP_MediaStop),
             ("Schedule", "schedule.png", "#4caf50", QStyle.SP_FileDialogContentsView)
         ]:
             button = QPushButton()
-            button.setFixedSize(160, 160)  # Larger, touch-friendly
+            button.setFixedSize(120, 120)  # Smaller, fits 50/50 split
             button.setFont(QFont("Arial", 20))
             icon_path = f"/home/admin/kiosk/gui/icons/{icon}"
             icon_dir = "/home/admin/kiosk/gui/icons"
@@ -170,21 +173,21 @@ class SourceScreen:
                     logging.warning(f"SourceScreen: Failed to list icon directory {icon_dir}: {e}")
             if os.path.exists(icon_path):
                 button.setIcon(QIcon(icon_path))
-                button.setIconSize(QSize(152, 152))  # Maximum size for custom icons
+                button.setIconSize(QSize(112, 112))  # Fits smaller buttons
                 try:
-                    logging.debug(f"SourceScreen: Loaded custom icon for {action}: {icon_path}, size: 152x152px, file_size: {os.path.getsize(icon_path)} bytes")
+                    logging.debug(f"SourceScreen: Loaded custom icon for {action}: {icon_path}, size: 112x112px, file_size: {os.path.getsize(icon_path)} bytes")
                 except Exception as e:
                     logging.warning(f"SourceScreen: Failed to get file size for {icon_path}: {e}")
             else:
                 button.setIcon(self.widget.style().standardIcon(qt_icon))  # Qt fallback
-                logging.warning(f"SourceScreen: Custom icon not found for {action}: {icon_path}, using Qt icon {qt_icon}, size: 152x152px")
+                logging.warning(f"SourceScreen: Custom icon not found for {action}: {icon_path}, using Qt icon {qt_icon}, size: 112x112px")
             button.setStyleSheet(f"""
                 QPushButton {{
                     background: {color};
                     color: #ffffff;
                     border-radius: 8px;
                     padding: 2px;
-                    icon-size: 152px;
+                    icon-size: 112px;
                 }}
             """)
             if action == "Play":
@@ -224,8 +227,8 @@ class SourceScreen:
 
     def update_output_button_style(self, name, is_current, is_other):
         button = self.output_buttons[name]
+        button.setText(name)  # Static text, no "(Selected)" or "(Other Input)"
         if is_current:
-            button.setText(f"{name} (Selected)")
             button.setStyleSheet("""
                 QPushButton {
                     background: #1f618d;
@@ -235,7 +238,6 @@ class SourceScreen:
                 }
             """)
         elif is_other:
-            button.setText(f"{name} (Other Input)")
             button.setStyleSheet("""
                 QPushButton {
                     background: #c0392b;
@@ -245,7 +247,6 @@ class SourceScreen:
                 }
             """)
         else:
-            button.setText(name)
             button.setStyleSheet("""
                 QPushButton {
                     background: #7f8c8d;
@@ -271,7 +272,7 @@ class SourceScreen:
                 if not self.parent.input_output_map[input_num]:
                     del self.parent.input_output_map[input_num]
         is_current = input_num in self.parent.input_output_map and output_idx in self.parent.input_output_map.get(input_num, [])
-        is_other = any(other_input != input_num and output_idx in self.parent.input_output_map.get(other_input, []) and self.parent.active_inputs.get(other_input, False) for other_input in self.parent.input_output_map)
+        is_other = any(other_input != 2 and output_idx in self.parent.input_output_map.get(other_input, []) and self.parent.active_inputs.get(other_input, False) for other_input in self.parent.input_output_map)
         self.update_output_button_style(tv_name, is_current, is_other)
         logging.debug(f"SourceScreen: Toggled output {tv_name}: checked={checked}, map={self.parent.input_output_map}")
 
@@ -307,21 +308,21 @@ class SourceScreen:
                 logging.warning(f"SourceScreen: Failed to list icon directory {icon_dir}: {e}")
         if os.path.exists(icon_path):
             self.play_button.setIcon(QIcon(icon_path))
-            self.play_button.setIconSize(QSize(152, 152))  # Maximum size for custom icons
+            self.play_button.setIconSize(QSize(112, 112))  # Fits smaller buttons
             try:
-                logging.debug(f"SourceScreen: Updated play button with custom icon: {icon_path}, size: 152x152px, file_size: {os.path.getsize(icon_path)} bytes")
+                logging.debug(f"SourceScreen: Updated play button with custom icon: {icon_path}, size: 112x112px, file_size: {os.path.getsize(icon_path)} bytes")
             except Exception as e:
                 logging.warning(f"SourceScreen: Failed to get file size for {icon_path}: {e}")
         else:
             self.play_button.setIcon(self.widget.style().standardIcon(qt_icon))  # Qt fallback
-            logging.warning(f"SourceScreen: Play/Pause custom icon not found: {icon_path}, using Qt icon {qt_icon}, size: 152x152px")
+            logging.warning(f"SourceScreen: Play/Pause custom icon not found: {icon_path}, using Qt icon {qt_icon}, size: 112x112px")
         self.play_button.setStyleSheet(f"""
             QPushButton {{
                 background: #4caf50;
                 color: #ffffff;
                 border-radius: 8px;
                 padding: 2px;
-                icon-size: 152px;
+                icon-size: 112px;
             }}
         """)
         self.playback_state_label.update()
