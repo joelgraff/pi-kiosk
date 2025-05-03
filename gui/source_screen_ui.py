@@ -7,6 +7,8 @@
 # Recent Changes (as of June 2025):
 # - Fixed 'setAlignment' error on Back button using QHBoxLayout.
 # - Extracted hardcoded values to config.py.
+# - Updated filepaths to use /home/admin/kiosk/ project root.
+# - Fixed QFont error by using QFont.Bold in TITLE_FONT.
 #
 # Dependencies:
 # - config.py: Filepaths, TV outputs, UI constants.

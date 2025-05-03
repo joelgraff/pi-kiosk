@@ -13,6 +13,9 @@
 #
 # Recent Changes (as of June 2025):
 # - Updated filepaths to use /home/admin/kiosk/ as project root.
+# - Fixed TITLE_FONT to use QFont.Bold instead of string "Bold".
+
+from PyQt5.QtGui import QFont
 
 # Filepaths (all project files under /home/admin/kiosk/)
 PROJECT_ROOT = "/home/admin/kiosk"
@@ -56,7 +59,7 @@ LABEL_COLOR = "white"
 SOURCE_SCREEN_BACKGROUND = "#2a3b5e"
 
 # Fonts
-TITLE_FONT = ("Arial", 28, "Bold")
+TITLE_FONT = ("Arial", 28, QFont.Bold)
 WIDGET_FONT = ("Arial", 20)
 BACK_BUTTON_FONT = ("Arial", 16)
 
