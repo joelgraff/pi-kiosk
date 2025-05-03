@@ -6,22 +6,22 @@
 #
 # Environment:
 # - Raspberry Pi 5, X11 (QT_QPA_PLATFORM=xcb), PyQt5, 787x492px window.
-# - Logs: /home/admin/gui/logs/kiosk.log.
-# - Icons: /home/admin/kiosk/gui/icons (128x128px).
-# - Videos: /home/admin/videos.
+# - Logs: /home/admin/kiosk/logs/kiosk.log.
+# - Icons: /home/admin/kiosk/icons (128x128px).
+# - Videos: /home/admin/kiosk/videos.
+#
+# Recent Changes (as of June 2025):
+# - Added import os for QT_SCALE_FACTOR logging.
+# - Delayed setup_ui import to avoid circular dependency.
 #
 # Dependencies:
 # - PyQt5: GUI framework.
-# - source_screen_ui.py: UI setup.
-# - source_screen_outputs.py: Output button styling and toggling.
-# - source_screen_handlers.py: Event handlers.
-# - schedule_dialog.py, utilities.py.
+# - source_screen_ui.py: UI setup and event handlers.
+# - utilities.py.
 
 from PyQt5.QtWidgets import QWidget
-import logging, os
-from source_screen_ui import setup_ui
-from source_screen_outputs import update_output_button_style, toggle_output
-from source_screen_handlers import file_selected, open_schedule_dialog, update_sync_status, update_playback_state
+import logging
+import os
 
 class SourceScreen:
     def __init__(self, parent, source_name):
@@ -38,22 +38,9 @@ class SourceScreen:
         logging.debug(f"SourceScreen: QT_SCALE_FACTOR={os.environ.get('QT_SCALE_FACTOR', 'Not set')}")
 
     def setup_ui(self):
-        setup_ui(self)
-
-    def update_output_button_style(self, name, is_current, is_other):
-        update_output_button_style(self, name, is_current, is_other)
-
-    def toggle_output(self, tv_name, checked):
-        toggle_output(self, tv_name, checked)
-
-    def file_selected(self, item):
-        file_selected(self, item)
-
-    def open_schedule_dialog(self):
-        open_schedule_dialog(self)
-
-    def update_sync_status(self, status):
-        update_sync_status(self, status)
-
-    def update_playback_state(self):
-        update_playback_state(self)
+        try:
+            from source_screen_ui import setup_ui
+            setup_ui(self)
+        except ImportError as e:
+            logging.error(f"SourceScreen: Failed to import setup_ui: {e}")
+            raise
