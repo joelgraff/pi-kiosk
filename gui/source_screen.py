@@ -36,8 +36,8 @@
 # - Fixed file list: Case-insensitive extensions, added logging.
 # - Removed gradient backgrounds, used solid #2a3b5e.
 # - Buttons now 160x160px, horizontal layout, 30px spacing.
-# - Fixed icon path to /home/admin/kiosk/icons, increased icon size to 132x132px, padding to 2px.
-# - Fixed icon path to /home/admin/kiosk/gui/icons, increased icon size to 152x152px.
+# - Fixed icon path to /home/admin/kiosk/gui/icons, icon size 152x152px, padding 2px.
+# - Fixed error: Replaced Qt.Size with QSize for setIconSize.
 #
 # Known Considerations:
 # - File listbox shows only .mp4/.mkv files (case-insensitive); verify /home/admin/videos.
@@ -52,7 +52,7 @@
 # - os: For file listing.
 
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QListWidget, QLabel, QPushButton, QStyle
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont, QIcon
 from schedule_dialog import ScheduleDialog
 from utilities import list_files, load_schedule, save_schedule
@@ -170,7 +170,7 @@ class SourceScreen:
                     logging.warning(f"SourceScreen: Failed to list icon directory {icon_dir}: {e}")
             if os.path.exists(icon_path):
                 button.setIcon(QIcon(icon_path))
-                button.setIconSize(Qt.Size(152, 152))  # Maximum size for custom icons
+                button.setIconSize(QSize(152, 152))  # Maximum size for custom icons
                 try:
                     logging.debug(f"SourceScreen: Loaded custom icon for {action}: {icon_path}, size: 152x152px, file_size: {os.path.getsize(icon_path)} bytes")
                 except Exception as e:
@@ -307,7 +307,7 @@ class SourceScreen:
                 logging.warning(f"SourceScreen: Failed to list icon directory {icon_dir}: {e}")
         if os.path.exists(icon_path):
             self.play_button.setIcon(QIcon(icon_path))
-            self.play_button.setIconSize(Qt.Size(152, 152))  # Maximum size for custom icons
+            self.play_button.setIconSize(QSize(152, 152))  # Maximum size for custom icons
             try:
                 logging.debug(f"SourceScreen: Updated play button with custom icon: {icon_path}, size: 152x152px, file_size: {os.path.getsize(icon_path)} bytes")
             except Exception as e:
