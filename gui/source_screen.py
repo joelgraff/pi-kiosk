@@ -12,8 +12,8 @@
 #
 # Recent Changes (as of June 2025):
 # - Added import os for QT_SCALE_FACTOR logging.
-# - Delayed setup_ui import to avoid circular dependency.
 # - Moved setup_ui import to top for early error detection.
+# - Enhanced import logging to debug circular imports.
 #
 # Dependencies:
 # - PyQt5: GUI framework.
@@ -23,10 +23,15 @@
 from PyQt5.QtWidgets import QWidget
 import logging
 import os
+import sys
+
 try:
     from source_screen_ui import setup_ui
+    logging.debug("SourceScreen: Successfully imported setup_ui")
 except ImportError as e:
     logging.error(f"SourceScreen: Failed to import setup_ui: {e}")
+    logging.error(f"SourceScreen: sys.path: {sys.path}")
+    logging.error(f"SourceScreen: sys.modules: {list(sys.modules.keys())}")
     raise
 
 class SourceScreen:
@@ -45,4 +50,8 @@ class SourceScreen:
         logging.debug(f"SourceScreen: QT_SCALE_FACTOR={os.environ.get('QT_SCALE_FACTOR', 'Not set')}")
 
     def setup_ui(self):
-        setup_ui(self)
+        try:
+            setup_ui(self)
+        except Exception as e:
+            logging.error(f"SourceScreen: Failed to execute setup_ui: {e}")
+            raise
