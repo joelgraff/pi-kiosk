@@ -7,19 +7,21 @@
 # Recent Changes (as of June 2025):
 # - Fixed 'setAlignment' error on Back button using QHBoxLayout.
 # - Extracted hardcoded values to config.py.
-# - Updated filepaths to use /home/admin/kiosk/ project root.
+# - Updated filepaths to use /home/admin/kiosk/ project root (except VIDEO_DIR).
 # - Fixed QFont error by using QFont.Bold in TITLE_FONT.
-# - Added file listing for /home/admin/kiosk/videos.
+# - Added file listing for videos directory.
 # - Added Back button connection to show_controls.
 # - Improved file listing with directory checks and case-insensitive extensions.
 # - Disabled Play/Stop buttons until file selected.
 # - Merged file_selected, open_schedule_dialog, update_sync_status, update_playback_state,
 #   toggle_output, and update_output_button_style to avoid circular imports.
+# - Expanded video extensions and added placeholder for empty file list.
+# - Simplified Schedule dialog to placeholder QMessageBox.
 #
 # Dependencies:
 # - config.py: Filepaths, TV outputs, UI constants.
 
-from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QListWidget, QLabel, QPushButton, QStyle
+from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QListWidget, QLabel, QPushButton, QStyle, QMessageBox
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont, QIcon
 import logging
@@ -67,12 +69,16 @@ def setup_ui(self):
     # Populate file list
     if self.source_name == "Local Files":
         try:
+            logging.debug(f"SourceScreen: Checking video directory: {VIDEO_DIR}")
             if not os.path.exists(VIDEO_DIR):
                 logging.error(f"SourceScreen: Video directory does not exist: {VIDEO_DIR}")
+                self.file_list.addItem("No video directory found")
             elif not os.access(VIDEO_DIR, os.R_OK):
                 logging.error(f"SourceScreen: No read permission for video directory: {VIDEO_DIR}")
+                self.file_list.addItem("No permission to access videos")
             else:
-                video_extensions = ('.mp4', '.mkv', '.avi', '.MP4', '.MKV', '.AVI')
+                video_extensions = ('.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', 
+                                  '.MP4', '.MKV', '.AVI', '.MOV', '.WMV', '.FLV')
                 files = os.listdir(VIDEO_DIR)
                 logging.debug(f"SourceScreen: Files in {VIDEO_DIR}: {files}")
                 files_found = False
@@ -83,8 +89,10 @@ def setup_ui(self):
                         files_found = True
                 if not files_found:
                     logging.warning(f"SourceScreen: No video files found in {VIDEO_DIR}")
+                    self.file_list.addItem("No video files found")
         except Exception as e:
             logging.error(f"SourceScreen: Failed to list files in {VIDEO_DIR}: {e}")
+            self.file_list.addItem("Error loading files")
     self.file_list.itemClicked.connect(lambda item: file_selected(self, item))
     left_layout.addWidget(self.file_list)
     
@@ -227,9 +235,14 @@ def file_selected(self, item):
         file_path = os.path.join(VIDEO_DIR, item.text())
         self.parent.input_paths[LOCAL_FILES_INPUT_NUM] = file_path
         logging.debug(f"SourceScreen: Selected file: {file_path}")
-    if self.play_button and self.stop_button:
-        self.play_button.setEnabled(True)
-        self.stop_button.setEnabled(True)
+        if self.play_button and self.stop_button:
+            self.play_button.setEnabled(True)
+            self.stop_button.setEnabled(True)
+    else:
+        # Disable Play/Stop for non-video items (e.g., placeholder messages)
+        if self.play_button and self.stop_button:
+            self.play_button.setEnabled(False)
+            self.stop_button.setEnabled(False)
 
 def open_schedule_dialog(self):
     logging.debug("SourceScreen: Schedule button clicked")
@@ -240,10 +253,12 @@ def open_schedule_dialog(self):
         logging.debug("SourceScreen: Schedule dialog closed")
     except ImportError as e:
         logging.error(f"SourceScreen: Failed to import ScheduleDialog: {e}")
-        self.sender().setEnabled(False)  # Disable button
+        self.sync_status_label.setText("Schedule unavailable")
+        QMessageBox.warning(self.widget, "Error", "Scheduling is unavailable: Module not found")
     except Exception as e:
         logging.error(f"SourceScreen: Failed to open ScheduleDialog: {e}")
-        self.sender().setEnabled(False)  # Disable button
+        self.sync_status_label.setText("Schedule error")
+        QMessageBox.warning(self.widget, "Error", f"Scheduling failed: {str(e)}")
 
 def update_sync_status(self, status):
     logging.debug(f"SourceScreen: Updating sync status: {status}")

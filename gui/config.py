@@ -21,7 +21,7 @@ from PyQt5.QtGui import QFont
 PROJECT_ROOT = "/home/admin/kiosk"
 LOG_DIR = f"{PROJECT_ROOT}/logs"
 LOG_FILE = f"{LOG_DIR}/kiosk.log"
-VIDEO_DIR = f"{PROJECT_ROOT}/videos"
+VIDEO_DIR = f"{PROJECT_ROOT}/../videos"
 ICON_DIR = f"{PROJECT_ROOT}/icons"
 SCHEDULE_FILE = f"{PROJECT_ROOT}/schedule.json"
 NETWORK_SHARE_DIR = "/mnt/share"  # External mount
