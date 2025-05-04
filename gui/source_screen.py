@@ -165,6 +165,7 @@ class SourceScreen:
         from config import LOCAL_FILES_INPUT_NUM, HDMI_OUTPUTS, VIDEO_DIR
         logging.debug("SourceScreen: Play button clicked")
         if self.file_list.currentItem():
+            selected_file = self.file_list.currentItem().text()
             # Update source_states for Local Files
             self.parent.interface.source_states[self.source_name] = True
             # Map outputs to HDMI ports
@@ -177,10 +178,11 @@ class SourceScreen:
                             hdmi_map[hdmi_idx] = []
                         hdmi_map[hdmi_idx].append(output_idx)
             logging.debug(f"SourceScreen: Playback HDMI map: {hdmi_map}")
-            file_path = os.path.join(self.source_paths[self.current_source], self.file_list.currentItem().text())
-            self.playing_file = self.file_list.currentItem().text()  # Track playing file
+            file_path = os.path.join(self.source_paths[self.current_source], selected_file)
+            self.playing_file = selected_file  # Track playing file
             # Pass file path and hdmi_map to toggle_play_pause
             self.parent.playback.toggle_play_pause(self.source_name, file_path, hdmi_map)
+            logging.debug(f"SourceScreen: Playing file: {self.playing_file}")
             self.update_playback_state()
         else:
             logging.warning("SourceScreen: Play button clicked but no file selected")
@@ -190,6 +192,7 @@ class SourceScreen:
         self.parent.interface.source_states[self.source_name] = False
         self.playing_file = None  # Clear playing file
         self.parent.playback.stop_input(2)
+        logging.debug("SourceScreen: Playback stopped")
         self.update_playback_state()
 
     def toggle_output(self, tv_name, checked):
@@ -276,20 +279,23 @@ class SourceScreen:
         try:
             video_extensions = ('.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv',
                                 '.MP4', '.MKV', '.AVI', '.MOV', '.WMV', '.FLV')
-            files = os.listdir(source_path)
+            files = sorted(os.listdir(source_path))  # Sort files for consistent display
             logging.debug(f"SourceScreen: Files in {source_path}: {files}")
             files_found = False
             for file_name in files:
                 if any(file_name.endswith(ext) for ext in video_extensions):
                     item = QListWidgetItem(file_name)
-                    if file_name == self.playing_file and self.parent.interface.source_states.get(self.source_name, False):
+                    # Add play arrow icon for the actively playing file
+                    if (file_name == self.playing_file and 
+                        self.parent.interface.source_states.get(self.source_name, False)):
                         icon_path = os.path.join("/home/admin/kiosk/gui/icons", ICON_FILES["play"])
                         if os.path.exists(icon_path):
                             item.setIcon(QIcon(icon_path))
                             item.setSizeHint(QSize(0, FILE_LIST_ITEM_HEIGHT))
-                            logging.debug(f"SourceScreen: Added play icon for playing file: {file_name}")
+                            logging.debug(f"SourceScreen: Added play arrow icon for active file: {file_name}")
                         else:
                             logging.warning(f"SourceScreen: Play icon not found: {icon_path}")
+                            item.setIcon(self.widget.style().standardIcon(QStyle.SP_MediaPlay))
                     self.file_list.addItem(item)
                     logging.debug(f"SourceScreen: Added file to list: {file_name}")
                     files_found = True
