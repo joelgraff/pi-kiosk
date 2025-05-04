@@ -1,183 +1,151 @@
-# kiosk.py: Main application file for the media kiosk GUI
+# kiosk.py: Main application for the media kiosk
 #
 # Overview:
-# This file defines the KioskGUI class, the primary PyQt5 application window for a media kiosk
-# running on a Raspberry Pi 5 with X11. The application provides a touchscreen interface
-# for managing media playback (via mpv), network share syncing, and scheduling. It handles
-# source selection (e.g., Local Files, Web, Cast), and navigation between screens.
+# Initializes the media kiosk application on Raspberry Pi 5 with X11.
+# Sets up the main window (KioskGUI), logging, and signal handling.
 #
-# Recent Changes (as of June 2025):
-# - Temporarily disabled authentication to bypass PIN prompt.
-# - Added missing import os.
-# - Extracted hardcoded values to config.py.
+# Environment:
+# - Raspberry Pi 5, X11 (QT_QPA_PLATFORM=xcb), PyQt5, 787x492px main window.
+# - Logs: /home/admin/kiosk/logs/kiosk.log.
+# - Videos: /home/admin/videos.
 #
 # Dependencies:
 # - PyQt5: GUI framework.
-# - schedule: Task scheduling.
-# - mpv: Media playback (external binary).
-# - Files: interface.py, playback.py, output_dialog.py, source_screen.py,
-#   utilities.py, schedule_dialog.py, config.py.
+# - config.py: Configuration constants.
+# - interface.py: Main interface setup.
+# - playback.py: Media playback management.
+# - utilities.py: Signal handling and scheduling.
 
-import sys
 import os
-import signal
-import threading
+import sys
 import logging
-import schedule
-from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget
-from PyQt5.QtCore import Qt, QtMsgType, QTimer
-from interface import Interface
-from playback import Playback
-from utilities import signal_handler, run_scheduler, load_schedule, SyncNetworkShare
-from config import LOG_DIR, LOG_FILE, VIDEO_DIR, ICON_DIR, INPUTS, WINDOW_SIZE, QT_PLATFORM, MAIN_WINDOW_GRADIENT, LABEL_COLOR
+import signal
+from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel
+from PyQt5.QtCore import Qt
 
-# Custom Qt message handler to log Qt messages
-def qt_message_handler(msg_type, context, msg):
-    log_levels = {
-        QtMsgType.QtDebugMsg: logging.DEBUG,
-        QtMsgType.QtInfoMsg: logging.INFO,
-        QtMsgType.QtWarningMsg: logging.WARNING,
-        QtMsgType.QtCriticalMsg: logging.ERROR,
-        QtMsgType.QtFatalMsg: logging.CRITICAL
-    }
-    logging.log(log_levels.get(msg_type, logging.INFO), f"Qt: {msg}")
-    print(f"Qt: {msg}")
-
-# Set up logging
-logging.basicConfig(
-    filename=LOG_FILE,
-    level=logging.DEBUG,
-    format="%(asctime)s %(levelname)s: %(message)s"
-)
-
-# Ensure required directories
 try:
-    os.makedirs(LOG_DIR, exist_ok=True)
-    os.makedirs(VIDEO_DIR, exist_ok=True)
-    os.makedirs(ICON_DIR, exist_ok=True)
-except Exception as e:
-    logging.error(f"Failed to create directories: {e}")
+    from config import (
+        QT_PLATFORM, LOG_FILE, MAIN_WINDOW_GRADIENT, LABEL_COLOR,
+        WINDOW_SIZE, INPUTS, FONT_FAMILY, FONT_SIZES
+    )
+    from interface import Interface
+    from playback import Playback
+    from utilities import SyncNetworkShare, signal_handler
+except ImportError as e:
+    print(f"Import error: {e}")
     sys.exit(1)
-
-# Set up signal handling
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
 
 class KioskGUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        logging.debug("Initializing KioskGUI")
+        logging.debug("KioskGUI: Initializing")
+        self.interface = None
+        self.playback = None
+        self.sync_manager = None
+        self.input_output_map = {}  # {input_num: [output_indices]}
+        self.active_inputs = {}  # {input_num: bool}
+        self.source_states = {}  # {source_name: bool}
+        self.init_logging()
+        self.init_ui()
+        self.init_playback()
+        self.init_sync()
+        logging.debug("KioskGUI: Initialization complete")
+
+    def init_logging(self):
         try:
-            self.setWindowTitle("Media Kiosk")
-            self.setFixedSize(*WINDOW_SIZE)
-            self.setStyleSheet(f"""
-                QMainWindow {{
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                                                stop:0 {MAIN_WINDOW_GRADIENT[0]}, stop:1 {MAIN_WINDOW_GRADIENT[1]});
-                }}
-                QLabel {{
-                    color: {LABEL_COLOR};
-                }}
-            """)
-            self.stack = QStackedWidget()
-            self.setCentralWidget(self.stack)
-            self.source_screens = []
+            os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+            logging.basicConfig(
+                filename=LOG_FILE,
+                level=logging.DEBUG,
+                format="%(asctime)s,%(msecs)d %(levelname)s: %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S"
+            )
+            logging.debug("KioskGUI: Logging initialized")
+        except Exception as e:
+            print(f"Failed to initialize logging: {e}")
+            sys.exit(1)
 
-            self.input_map = {name: info["input_num"] for name, info in INPUTS.items()}
-            self.input_paths = {}
-            self.input_output_map = {}
-            self.active_inputs = {}
-            self.selected_source = None
-            self.media_processes = {}
-            self.authenticated = True  # Bypass authentication
-            logging.debug(f"Initialized input_map: {self.input_map}")
+    def init_ui(self):
+        try:
+            logging.debug(f"KioskGUI: Setting window size to {WINDOW_SIZE}")
+            if not isinstance(WINDOW_SIZE, (tuple, list)) or len(WINDOW_SIZE) != 2:
+                logging.error(f"KioskGUI: Invalid WINDOW_SIZE: {WINDOW_SIZE}")
+                raise ValueError("WINDOW_SIZE must be a tuple of (width, height)")
+            width, height = WINDOW_SIZE
+            self.setFixedSize(width, height)
+            self.setStyleSheet(MAIN_WINDOW_GRADIENT)
 
-            logging.debug("Initializing Playback")
-            self.playback = Playback(self)
-            logging.debug("Initializing Interface")
+            # Initialize interface
             self.interface = Interface(self)
-            self.stack.addWidget(self.interface.main_widget)
+            self.setCentralWidget(self.interface.widget)
 
+            # Example label for testing LABEL_COLOR
+            self.status_label = QLabel("Media Kiosk", self)
+            self.status_label.setStyleSheet(f"color: {LABEL_COLOR}; background: transparent; font: {FONT_SIZES['tile']}px {FONT_FAMILY};")
+            self.status_label.setAlignment(Qt.AlignCenter)
+            self.status_label.resize(width, 30)
+            self.status_label.move(0, height - 30)
+
+            logging.debug("KioskGUI: UI initialized")
+        except Exception as e:
+            logging.error(f"KioskGUI: Failed to initialize UI: {e}")
+            raise
+
+    def init_playback(self):
+        try:
+            self.playback = Playback()
+            logging.debug("KioskGUI: Playback initialized")
+        except Exception as e:
+            logging.error(f"KioskGUI: Failed to initialize playback: {e}")
+            raise
+
+    def init_sync(self):
+        try:
             self.sync_manager = SyncNetworkShare()
             self.sync_manager.progress.connect(self.interface.update_sync_status)
             self.sync_manager.progress.connect(self.update_source_sync_status)
-
-            logging.debug("Starting scheduler thread")
-            self.scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
-            self.scheduler_thread.start()
-            self.load_and_apply_schedule()
-
-            QTimer.singleShot(0, self.show_controls)
+            logging.debug("KioskGUI: Sync manager initialized")
         except Exception as e:
-            logging.error(f"Initialization failed: {e}")
-            sys.exit(1)
-
-    def show_controls(self):
-        try:
-            logging.debug("Showing controls")
-            for widget in self.source_screens:
-                try:
-                    widget.disconnect()
-                except Exception:
-                    pass
-                self.stack.removeWidget(widget)
-                widget.deleteLater()
-            self.source_screens.clear()
-            self.interface.main_widget.setVisible(True)
-            self.interface.main_widget.show()
-            self.stack.setCurrentWidget(self.interface.main_widget)
-            self.show()
-            logging.debug("Controls displayed")
-            sync_thread = threading.Thread(target=self.sync_manager.sync, daemon=True)
-            sync_thread.start()
-        except Exception as e:
-            logging.error(f"Failed to show controls: {e}")
-            sys.exit(1)
-
-    def show_source_screen(self, source_name):
-        try:
-            from source_screen import SourceScreen
-            source_screen = SourceScreen(self, source_name)
-            self.source_screens.append(source_screen.widget)
-            self.stack.addWidget(source_screen.widget)
-            self.stack.setCurrentWidget(source_screen.widget)
-            logging.debug(f"Displayed source screen for {source_name}")
-        except Exception as e:
-            logging.error(f"Failed to show source screen for {source_name}: {e}")
-            sys.exit(1)
+            logging.error(f"KioskGUI: Failed to initialize sync manager: {e}")
+            raise
 
     def update_source_sync_status(self, status):
-        try:
-            current_widget = self.stack.currentWidget()
-            if hasattr(current_widget, 'source_screen') and current_widget.source_screen.source_name == "Local Files":
-                current_widget.source_screen.update_sync_status(status)
-        except Exception as e:
-            logging.error(f"Failed to update source sync status: {e}")
+        logging.debug(f"KioskGUI: Sync status updated: {status}")
+        if self.interface and hasattr(self.interface, 'source_screens'):
+            for source_name, screen in self.interface.source_screens.items():
+                if source_name == "Local Files":
+                    screen.sync_status_label.setText(f"Network Sync: {status}")
+                    screen.sync_status_label.update()
 
-    def load_and_apply_schedule(self):
-        try:
-            sched = load_schedule()
-            for task in sched:
-                if task["repeat"] == "Daily":
-                    schedule.every().day.at(task["time"]).do(
-                        self.playback.execute_scheduled_task,
-                        input_num=task["input"],
-                        outputs=task["outputs"],
-                        path=task.get("path")
-                    )
-            logging.debug("Schedule loaded and applied")
-        except Exception as e:
-            logging.error(f"Failed to load schedule: {e}")
+    def closeEvent(self, event):
+        logging.debug("KioskGUI: Closing application")
+        self.playback.stop_all_playback()
+        event.accept()
 
-if __name__ == '__main__':
+def main():
     try:
-        logging.debug("Starting application")
+        # Set Qt platform
         os.environ["QT_QPA_PLATFORM"] = QT_PLATFORM
+        logging.debug(f"Main: Set QT_QPA_PLATFORM to {QT_PLATFORM}")
+
+        # Initialize application
         app = QApplication(sys.argv)
-        from PyQt5.QtCore import qInstallMessageHandler
-        qInstallMessageHandler(qt_message_handler)
-        kiosk = KioskGUI()
+        app.setStyle("Fusion")
+
+        # Initialize KioskGUI
+        gui = KioskGUI()
+        gui.show()
+
+        # Set up signal handling
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+
+        logging.debug("Main: Application started")
         sys.exit(app.exec_())
     except Exception as e:
-        logging.error(f"Application failed: {e}")
+        logging.error(f"Main: Application failed: {e}")
+        print(f"Application failed: {e}")
         sys.exit(1)
+
+if __name__ == "__main__":
+    main()
