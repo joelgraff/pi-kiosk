@@ -94,10 +94,13 @@ class KioskGUI(QMainWindow):
     def init_playback(self):
         try:
             self.playback = Playback()
+            if self.playback is None:
+                raise ValueError("Playback initialization returned None")
             logging.debug("KioskGUI: Playback initialized")
         except Exception as e:
             logging.error(f"KioskGUI: Failed to initialize playback: {e}")
-            raise
+            self.playback = None  # Explicitly set to None for clarity
+            raise  # Re-raise to halt initialization if playback fails
 
     def init_sync(self):
         try:
@@ -119,7 +122,13 @@ class KioskGUI(QMainWindow):
 
     def closeEvent(self, event):
         logging.debug("KioskGUI: Closing application")
-        self.playback.stop_all_playback()
+        try:
+            if self.playback is not None:
+                self.playback.stop_all_playback()
+            else:
+                logging.warning("KioskGUI: No playback instance available to stop")
+        except Exception as e:
+            logging.error(f"KioskGUI: Failed to stop playback: {e}")
         event.accept()
 
 def main():
