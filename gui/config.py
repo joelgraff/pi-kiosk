@@ -1,111 +1,111 @@
-# config.py: Centralized configuration for the media kiosk project
+# config.py: Centralized configuration for the media kiosk
 #
 # Overview:
-# Defines hardcoded values that may need to be changed, such as filepaths, TV outputs,
-# input sources, and UI constants. Used by kiosk.py, source_screen.py, and related files.
+# Defines constants for the media kiosk on Raspberry Pi 5 with X11.
+# Includes file paths, TV outputs, HDMI mappings, input sources, and UI settings.
 #
-# Categories:
-# - Filepaths: Directories and files for logs, videos, icons, etc.
-# - TV Outputs: Names and mappings for TV outputs.
-# - Inputs: Source names, input numbers, and types.
-# - UI: Window sizes, colors, fonts, button sizes, spacing, etc.
-# - Other: PIN, input numbers, etc.
-#
-# Recent Changes (as of June 2025):
-# - Updated filepaths to use /home/admin/kiosk/ as project root for most files.
-# - Fixed TITLE_FONT to use QFont.Bold instead of string "Bold".
-# - Updated VIDEO_DIR to /home/admin/videos (outside project root).
-# - Added HDMI_OUTPUTS to map TV outputs to HDMI ports.
+# Environment:
+# - Raspberry Pi 5, X11 (QT_QPA_PLATFORM=xcb), PyQt5, 787x492px main window.
+# - Logs: /home/admin/kiosk/logs/kiosk.log.
+# - Icons: /home/admin/kiosk/icons (128x128px).
+# - Videos: /home/admin/videos.
 
-from PyQt5.QtGui import QFont
+import os
 
 # Filepaths
 PROJECT_ROOT = "/home/admin/kiosk"
-LOG_DIR = f"{PROJECT_ROOT}/logs"
-LOG_FILE = f"{LOG_DIR}/kiosk.log"
-VIDEO_DIR = "/home/admin/videos"  # Videos are under user root
-ICON_DIR = f"{PROJECT_ROOT}/icons"
-SCHEDULE_FILE = f"{PROJECT_ROOT}/schedule.json"
-NETWORK_SHARE_DIR = "/mnt/share"  # External mount
-USB_STORAGE_DIR = "/mnt/usb"      # External mount
+VIDEO_DIR = "/home/admin/videos"
+LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
+SCHEDULE_FILE = os.path.join(PROJECT_ROOT, "schedule.json")
+ICON_DIR = os.path.join(PROJECT_ROOT, "icons")
+
+# TV Outputs (key: name, value: index)
+TV_OUTPUTS = {
+    "Fellowship 1": 0,
+    "Fellowship 2": 1,
+    "Fellowship 3": 2,
+}
+
+# HDMI Outputs (key: HDMI port index, value: list of TV output indices)
+HDMI_OUTPUTS = {
+    0: [0],  # HDMI-A-1: Fellowship 1
+    1: [1],  # HDMI-A-2: Fellowship 2
+    2: [2],  # HDMI-A-3: Fellowship 3
+}
+
+# Input Sources (key: name, value: input number for matrix routing)
+INPUTS = {
+    "Local Files": 2,
+    "Audio": 3,
+    "DVD": 4,
+    "Web": 5,
+}
+
+# Dynamic Input Number Generator for Multiple Files
+NEXT_INPUT_NUM = 100  # Start at 100 to avoid conflicts with INPUTS
+
+def get_next_input_num():
+    global NEXT_INPUT_NUM
+    input_num = NEXT_INPUT_NUM
+    NEXT_INPUT_NUM += 1
+    return input_num
+
+# Local Files Input Number (base for single-file mode)
+LOCAL_FILES_INPUT_NUM = INPUTS["Local Files"]
+
+# UI Constants
+WINDOW_SIZE = (787, 492)
+TILE_SIZE = (245, 190)
+OUTPUT_BUTTON_SIZE = (245, 184)
+SCHEDULE_BUTTON_SIZE = (245, 92)
+FILE_LIST_ITEM_HEIGHT = 48
+PIN = "1234"  # Default PIN for auth_dialog
+
+# Colors
+TILE_COLOR = "#0078D7"
+TILE_TEXT_COLOR = "white"
+OUTPUT_BUTTON_COLORS = {
+    "selected": "#0078D7",  # Blue for current input
+    "other": "#D83B01",     # Red for other inputs
+    "unselected": "#808080" # Gray for unassigned
+}
+PLAY_BUTTON_COLOR = "#0078D7"
+STOP_BUTTON_COLOR = "#D83B01"
+SCHEDULE_BUTTON_COLOR = "#0078D7"
+TEXT_COLOR = "white"
+BACKGROUND_COLOR = "black"
+PLAYBACK_STATUS_COLORS = {
+    "playing": "#00FF00",  # Green
+    "stopped": "#FF0000"   # Red
+}
+
+# Fonts
+FONT_FAMILY = "Arial"
+FONT_SIZES = {
+    "tile": 14,
+    "output": 14,
+    "schedule": 12,
+    "playback_status": 12,
+    "file_list": 12
+}
+
+# Icon Files (128x128px)
 ICON_FILES = {
+    "local_files": "local_files.png",
+    "audio": "audio.png",
+    "dvd": "dvd.png",
+    "web": "web.png",
+    "stop_all": "stop_all.png",
     "play": "play.png",
-    "stop": "stop.png",
     "pause": "pause.png"
 }
 
-# TV Outputs
-TV_OUTPUTS = {
-    "Fellowship 1": 1,
-    "Fellowship 2": 2,
-    "Nursery": 3,
-    "Sanctuary": 4
-}
-TOTAL_TV_OUTPUTS = len(TV_OUTPUTS)
-
-# HDMI Output Mappings
-HDMI_OUTPUTS = {
-    0: [1, 4],  # HDMI 0: Fellowship 1 (1), Sanctuary (4)
-    1: [2, 3]   # HDMI 1: Fellowship 2 (2), Nursery (3)
+# Button Padding
+BUTTON_PADDING = {
+    "tile": 10,
+    "play_stop": 10,
+    "schedule_output": 8
 }
 
-# Inputs
-INPUTS = {
-    "Local Files": {"input_num": 2, "type": "video"},
-    "Audio": {"input_num": 1, "type": "audio"},
-    "DVD": {"input_num": 3, "type": "dvd"},
-    "Web": {"input_num": 4, "type": "web"}
-}
-TOTAL_INPUTS = len(INPUTS)
-
-# UI Constants
-WINDOW_SIZE = (787, 492)  # Main window (width, height)
-AUTH_DIALOG_SIZE = (245, 184)
-QT_PLATFORM = "xcb"
-MAIN_WINDOW_GRADIENT = ("#2c3e50", "#34495e")  # Start, end colors
-LABEL_COLOR = "white"
-SOURCE_SCREEN_BACKGROUND = "#2a3b5e"
-
-# Fonts
-TITLE_FONT = ("Arial", 28, QFont.Bold)
-WIDGET_FONT = ("Arial", 20)
-BACK_BUTTON_FONT = ("Arial", 16)
-
-# Colors
-SCHEDULE_BUTTON_COLOR = "#4caf50"  # Green
-PLAY_BUTTON_COLOR = "#4caf50"  # Green
-STOP_BUTTON_COLOR = "#e53935"  # Red
-SYNC_STATUS_COLOR = "#ffc107"  # Yellow
-PLAYBACK_STATUS_COLORS = {"playing": "#4caf50", "stopped": "#e53935"}  # Green, red
-OUTPUT_BUTTON_COLORS = {
-    "selected": "#1f618d",  # Blue
-    "other": "#c0392b",     # Red
-    "unselected": "#7f8c8d" # Gray
-}
-BACK_BUTTON_COLOR = "#7f8c8d"  # Gray
-TEXT_COLOR = "#ffffff"  # White
-FILE_LIST_BORDER_COLOR = "#ffffff"  # White
-
-# Sizes
-FILE_LIST_HEIGHT = 260  # px
-FILE_LIST_ITEM_HEIGHT = 60  # px
-SCHEDULE_BUTTON_SIZE = (180, 60)  # width, height
-OUTPUT_BUTTON_SIZE = (180, 60)
-PLAY_STOP_BUTTON_SIZE = (120, 120)
-BACK_BUTTON_SIZE = (80, 40)
-ICON_SIZE = (112, 112)
-
-# Spacing and Padding
-MAIN_LAYOUT_SPACING = 20  # px
-TOP_LAYOUT_SPACING = 20
-OUTPUTS_CONTAINER_SPACING = 10
-OUTPUT_LAYOUT_SPACING = 5
-BUTTONS_LAYOUT_SPACING = 15
-RIGHT_LAYOUT_SPACING = 20
-BUTTON_PADDING = {"schedule_output": 10, "back": 5, "play_stop": 2}
-FILE_LIST_PADDING = 5
-BORDER_RADIUS = 8  # px
-
-# Other
-PIN = "1234"  # Hardcoded PIN (bypassed)
-LOCAL_FILES_INPUT_NUM = 2
+# Border Radius
+BORDER_RADIUS = 5

@@ -15,7 +15,7 @@
 # - source_screen_ui.py: UI setup.
 # - utilities.py.
 
-from PyQt5.QtWidgets import QWidget, QListWidgetItem
+from PyQt5.QtWidgets import QWidget, QListWidgetItem, QMenu, QAction
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal, QObject
 import logging
@@ -24,9 +24,10 @@ import sys
 
 try:
     from source_screen_ui import setup_ui
-    logging.debug("SourceScreen: Successfully imported setup_ui")
+    from output_dialog import OutputDialog
+    logging.debug("SourceScreen: Successfully imported setup_ui and OutputDialog")
 except ImportError as e:
-    logging.error(f"SourceScreen: Failed to import setup_ui: {e}")
+    logging.error(f"SourceScreen: Failed to import: {e}")
     logging.error(f"SourceScreen: sys.path: {sys.path}")
     logging.error(f"SourceScreen: sys.modules: {list(sys.modules.keys())}")
     raise
@@ -87,7 +88,8 @@ class SourceScreen:
         self.play_button = None  # Set in setup_ui
         self.stop_button = None  # Set in setup_ui
         self.playback_state_label = None  # Set in setup_ui
-        self.playing_file = None  # Track currently playing file
+        self.active_files = {}  # Track playing files: {filename: input_num}
+        self.input_output_map = {}  # Track file-specific outputs: {input_num: [output_indices]}
         # Initialize USB/Internal state
         self.usb_path = None
         usb_base = "/media/admin/"
@@ -103,10 +105,23 @@ class SourceScreen:
     def setup_ui(self):
         try:
             setup_ui(self)
+            self.file_list.setContextMenuPolicy(Qt.CustomContextMenu)
+            self.file_list.customContextMenuRequested.connect(self.show_context_menu)
             self.update_file_list()  # Populate file list after UI setup
         except Exception as e:
             logging.error(f"SourceScreen: Failed to execute setup_ui: {e}")
             raise
+
+    def show_context_menu(self, position):
+        if not self.file_list.itemAt(position):
+            return
+        item = self.file_list.itemAt(position)
+        filename = item.text()
+        menu = QMenu()
+        stop_action = QAction("Stop Playback", self.widget)
+        stop_action.triggered.connect(lambda: self.stop_file(filename))
+        menu.addAction(stop_action)
+        menu.exec_(self.file_list.mapToGlobal(position))
 
     def check_sync_status(self):
         logging.debug("SourceScreen: Initiating network share sync check")
@@ -133,43 +148,38 @@ class SourceScreen:
         self.update_file_list()
 
     def update_playback_state(self):
-        from config import ICON_FILES, PLAYBACK_STATUS_COLORS, PLAY_BUTTON_COLOR, TEXT_COLOR, BORDER_RADIUS, BUTTON_PADDING
-        from PyQt5.QtWidgets import QStyle
+        from config import PLAYBACK_STATUS_COLORS, PLAY_BUTTON_COLOR, TEXT_COLOR, BORDER_RADIUS, BUTTON_PADDING
         logging.debug(f"SourceScreen: Updating playback state for {self.source_name}")
-        is_playing = self.parent.interface.source_states.get(self.source_name, False)
+        is_playing = bool(self.active_files)  # Playing if any files are active
         state = "Playing" if is_playing else "Stopped"
         self.playback_state_label.setText(f"Playback: {state}")
         self.playback_state_label.setStyleSheet(f"color: {PLAYBACK_STATUS_COLORS[state.lower()]}; background: transparent;")
-        icon_file = ICON_FILES["pause"] if is_playing else ICON_FILES["play"]
-        icon_path = os.path.join("/home/admin/kiosk/gui/icons", icon_file)  # Updated ICON_DIR
-        qt_icon = QStyle.SP_MediaPause if is_playing else QStyle.SP_MediaPlay
-        if os.path.exists(icon_path):
-            self.play_button.setIcon(QIcon(icon_path))
-            self.play_button.setIconSize(QSize(48, 48))  # Scale to 48x48px
-            logging.debug(f"SourceScreen: Updated play button with custom icon: {icon_path}")
-        else:
-            self.play_button.setIcon(self.widget.style().standardIcon(qt_icon))
-            logging.warning(f"SourceScreen: Play/Pause custom icon not found: {icon_path}")
-        self.play_button.setStyleSheet(f"""
-            QPushButton {{
-                background: {PLAY_BUTTON_COLOR};
-                color: {TEXT_COLOR};
-                border-radius: {BORDER_RADIUS}px;
-                padding: {BUTTON_PADDING['play_stop']}px;
-            }}
-        """)
         self.playback_state_label.update()
-        self.update_file_list()  # Refresh file list to show/hide play icon
+        self.update_file_list()  # Refresh file list to show/hide play icons
 
     def on_play_clicked(self):
-        from config import LOCAL_FILES_INPUT_NUM, HDMI_OUTPUTS, VIDEO_DIR
+        from config import TV_OUTPUTS, VIDEO_DIR
         logging.debug("SourceScreen: Play button clicked")
-        if self.file_list.currentItem():
-            selected_file = self.file_list.currentItem().text()
-            # Update source_states for Local Files
-            self.parent.interface.source_states[self.source_name] = True
+        if not self.file_list.currentItem():
+            logging.warning("SourceScreen: Play button clicked but no file selected")
+            return
+        selected_file = self.file_list.currentItem().text()
+        if selected_file in self.active_files:
+            logging.warning(f"SourceScreen: File already playing: {selected_file}")
+            return
+        # Show OutputDialog to select outputs
+        dialog = OutputDialog(self.parent, self.source_name, TV_OUTPUTS)
+        if dialog.exec_():
+            selected_outputs = dialog.get_selected_outputs()
+            if not selected_outputs:
+                logging.warning("SourceScreen: No outputs selected for playback")
+                return
+            from config import get_next_input_num
+            input_num = get_next_input_num()
+            self.input_output_map[input_num] = selected_outputs
+            self.active_files[selected_file] = input_num
             # Map outputs to HDMI ports
-            selected_outputs = self.parent.input_output_map.get(LOCAL_FILES_INPUT_NUM, [])
+            from config import HDMI_OUTPUTS
             hdmi_map = {}
             for hdmi_idx, output_indices in HDMI_OUTPUTS.items():
                 for output_idx in output_indices:
@@ -177,28 +187,35 @@ class SourceScreen:
                         if hdmi_idx not in hdmi_map:
                             hdmi_map[hdmi_idx] = []
                         hdmi_map[hdmi_idx].append(output_idx)
-            logging.debug(f"SourceScreen: Playback HDMI map: {hdmi_map}")
+            logging.debug(f"SourceScreen: Playback HDMI map for {selected_file}: {hdmi_map}")
             file_path = os.path.join(self.source_paths[self.current_source], selected_file)
-            self.playing_file = selected_file  # Track playing file
-            # Pass file path and hdmi_map to toggle_play_pause
-            self.parent.playback.toggle_play_pause(self.source_name, file_path, hdmi_map)
-            logging.debug(f"SourceScreen: Playing file: {self.playing_file}")
+            # Start playback for this file
+            self.parent.playback.start_playback(self.source_name, file_path, hdmi_map, input_num)
+            logging.debug(f"SourceScreen: Started playback for {selected_file} with input {input_num}")
             self.update_playback_state()
-        else:
-            logging.warning("SourceScreen: Play button clicked but no file selected")
 
     def on_stop_clicked(self):
         logging.debug("SourceScreen: Stop button clicked")
-        self.parent.interface.source_states[self.source_name] = False
-        self.playing_file = None  # Clear playing file
-        self.parent.playback.stop_input(2)
-        logging.debug("SourceScreen: Playback stopped")
+        for filename, input_num in list(self.active_files.items()):
+            self.stop_file(filename)
+        self.update_playback_state()
+
+    def stop_file(self, filename):
+        if filename not in self.active_files:
+            logging.warning(f"SourceScreen: Attempted to stop non-playing file: {filename}")
+            return
+        input_num = self.active_files[filename]
+        self.parent.playback.stop_input(input_num)
+        del self.active_files[filename]
+        if input_num in self.input_output_map:
+            del self.input_output_map[input_num]
+        logging.debug(f"SourceScreen: Stopped playback for {filename} with input {input_num}")
         self.update_playback_state()
 
     def toggle_output(self, tv_name, checked):
         from config import TV_OUTPUTS, LOCAL_FILES_INPUT_NUM, OUTPUT_BUTTON_COLORS, BORDER_RADIUS, BUTTON_PADDING
         output_idx = TV_OUTPUTS[tv_name]
-        input_num = LOCAL_FILES_INPUT_NUM
+        input_num = LOCAL_FILES_INPUT_NUM  # Used for global source output display
         if checked:
             if input_num not in self.parent.input_output_map:
                 self.parent.input_output_map[input_num] = []
@@ -212,7 +229,7 @@ class SourceScreen:
                 if not self.parent.input_output_map[input_num]:
                     del self.parent.input_output_map[input_num]
         is_current = input_num in self.parent.input_output_map and output_idx in self.parent.input_output_map.get(input_num, [])
-        is_other = any(other_input != input_num and output_idx in self.parent.input_output_map.get(other_input, []) and self.parent.active_inputs.get(other_input, False) for other_input in self.parent.input_output_map)
+        is_other = any(other_input != input_num and output_idx in self.input_output_map.get(other_input, []) for other_input in self.input_output_map)
         self.update_output_button_style(tv_name, is_current, is_other)
         logging.debug(f"SourceScreen: Toggled output {tv_name}: checked={checked}, map={self.parent.input_output_map}")
 
@@ -225,7 +242,7 @@ class SourceScreen:
         elif is_other:
             color = OUTPUT_BUTTON_COLORS["other"]
         else:
-            color = OUTPUT_BUTTON_COLORS["unselected"]
+            color = OUTPUT_BUTTON_COLORS["unassigned"]
         button.setStyleSheet(f"""
             QPushButton {{
                 background: {color};
@@ -240,21 +257,19 @@ class SourceScreen:
         from config import OUTPUT_BUTTON_COLORS, BORDER_RADIUS, BUTTON_PADDING
         if checked:
             self.current_source = source_name
-            self.playing_file = None  # Clear playing file on source change
+            self.update_file_list()
             for name, button in self.source_buttons.items():
                 button.setChecked(name == source_name)
                 self.update_source_button_style(name, name == source_name)
             logging.debug(f"SourceScreen: Switched to source: {source_name}")
-            self.update_file_list()
         else:
-            # Prevent unchecking the current source
             self.source_buttons[self.current_source].setChecked(True)
 
     def update_source_button_style(self, name, is_selected):
         from config import OUTPUT_BUTTON_COLORS, BORDER_RADIUS, BUTTON_PADDING
         button = self.source_buttons[name]
         color = OUTPUT_BUTTON_COLORS["selected"] if is_selected else OUTPUT_BUTTON_COLORS["unselected"]
-        text_color = "white" if button.isEnabled() else "#A0A0A0"  # Lighter gray for disabled
+        text_color = "white" if button.isEnabled() else "#A0A0A0"
         button.setStyleSheet(f"""
             QPushButton {{
                 background: {color};
@@ -278,16 +293,14 @@ class SourceScreen:
             return
         try:
             video_extensions = ('.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv',
-                                '.MP4', '.MKV', '.AVI', '.MOV', '.WMV', '.FLV')
-            files = sorted(os.listdir(source_path))  # Sort files for consistent display
+                                '.MP4', '.MKV', '.AVI', '.MOV', '.WMV', '. moulv', '.FLV')
+            files = sorted(os.listdir(source_path))
             logging.debug(f"SourceScreen: Files in {source_path}: {files}")
             files_found = False
             for file_name in files:
                 if any(file_name.endswith(ext) for ext in video_extensions):
                     item = QListWidgetItem(file_name)
-                    # Add play arrow icon for the actively playing file
-                    if (file_name == self.playing_file and 
-                        self.parent.interface.source_states.get(self.source_name, False)):
+                    if file_name in self.active_files:
                         icon_path = os.path.join("/home/admin/kiosk/gui/icons", ICON_FILES["play"])
                         if os.path.exists(icon_path):
                             item.setIcon(QIcon(icon_path))
