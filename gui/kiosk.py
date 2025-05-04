@@ -29,7 +29,6 @@ try:
         WINDOW_SIZE, INPUTS, FONT_FAMILY, FONT_SIZES
     )
     from interface import Interface
-    from playback import Playback
     from utilities import SyncNetworkShare, signal_handler
 except ImportError as e:
     print(f"Import error: {e}")
@@ -45,10 +44,12 @@ class KioskGUI(QMainWindow):
         self.input_output_map = {}  # {input_num: [output_indices]}
         self.active_inputs = {}  # {input_num: bool}
         self.source_states = {}  # {source_name: bool}
+        self.selected_source = None
         self.init_logging()
         self.init_ui()
         self.init_playback()
         self.init_sync()
+        self.interface.connect_stop_all()  # Connect stop_all_button after playback initialization
         logging.debug("KioskGUI: Initialization complete")
 
     def init_logging(self):
@@ -77,7 +78,7 @@ class KioskGUI(QMainWindow):
 
             # Initialize interface
             self.interface = Interface(self)
-            self.setCentralWidget(self.interface.widget)
+            self.setCentralWidget(self.interface.main_widget)
 
             # Example label for testing LABEL_COLOR
             self.status_label = QLabel("Media Kiosk", self)
@@ -93,14 +94,15 @@ class KioskGUI(QMainWindow):
 
     def init_playback(self):
         try:
+            from playback import Playback  # Delayed import
             self.playback = Playback()
             if self.playback is None:
                 raise ValueError("Playback initialization returned None")
             logging.debug("KioskGUI: Playback initialized")
         except Exception as e:
             logging.error(f"KioskGUI: Failed to initialize playback: {e}")
-            self.playback = None  # Explicitly set to None for clarity
-            raise  # Re-raise to halt initialization if playback fails
+            self.playback = None
+            raise
 
     def init_sync(self):
         try:
@@ -119,6 +121,13 @@ class KioskGUI(QMainWindow):
                 if source_name == "Local Files":
                     screen.sync_status_label.setText(f"Network Sync: {status}")
                     screen.sync_status_label.update()
+
+    def show_source_screen(self, source_name):
+        logging.debug(f"KioskGUI: Showing source screen: {source_name}")
+        if hasattr(self.interface, 'source_screens') and source_name in self.interface.source_screens:
+            self.setCentralWidget(self.interface.source_screens[source_name].widget)
+        else:
+            logging.error(f"KioskGUI: Source screen not found: {source_name}")
 
     def closeEvent(self, event):
         logging.debug("KioskGUI: Closing application")
