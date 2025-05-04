@@ -32,6 +32,7 @@
 # - Removed update_file_list call to fix AttributeError, updated ICON_DIR to /home/admin/kiosk/gui/icons.
 # - Scaled Play/Stop icons to 24x24px, then doubled to 48x48px.
 # - Aligned file listbox top with TV buttons, repositioned USB/Internal buttons equidistant between file listbox and Schedule.
+# - Corrected file listbox top alignment to match Fellowship 1/2 buttons, adjusted USB/Internal buttons downward with OUTPUT_LAYOUT_SPACING.
 #
 # Dependencies:
 # - config.py: Filepaths, TV outputs, UI constants.
@@ -71,7 +72,7 @@ def setup_ui(self):
     left_layout.addWidget(title)
     
     # Spacer to align file list with TV buttons (below Play/Stop)
-    left_layout.addSpacing(SCHEDULE_BUTTON_SIZE[1] + BUTTONS_LAYOUT_SPACING)
+    left_layout.addSpacing(OUTPUT_LAYOUT_SPACING)
     
     self.file_list = QListWidget()
     self.file_list.setFont(QFont(*WIDGET_FONT))
@@ -88,8 +89,8 @@ def setup_ui(self):
     self.file_list.itemClicked.connect(lambda item: file_selected(self, item))
     left_layout.addWidget(self.file_list)
     
-    # Spacer to position USB/Internal buttons equidistant
-    left_layout.addSpacing(66)  # Approx half of ~132px gap
+    # Spacer to position USB/Internal buttons
+    left_layout.addSpacing(OUTPUT_LAYOUT_SPACING)
     
     # USB/Internal toggles
     source_layout = QHBoxLayout()
@@ -106,10 +107,8 @@ def setup_ui(self):
         source_layout.addWidget(button)
     left_layout.addLayout(source_layout)
     
-    # Spacer to complete equidistant positioning
-    left_layout.addSpacing(66)  # Approx half of ~132px gap
-    
-    left_layout.addStretch()
+    # Spacer to complete positioning
+    left_layout.addSpacing(OUTPUT_LAYOUT_SPACING)
     
     top_layout.addLayout(left_layout, 1)
     
