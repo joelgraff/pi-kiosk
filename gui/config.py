@@ -72,6 +72,7 @@ MAIN_WINDOW_GRADIENT = """
     );
 """  # Blue gradient for main window
 LABEL_COLOR = "white"  # Color for QLabel text
+SOURCE_SCREEN_BACKGROUND = "black"  # Background color for SourceScreen widget
 
 # Colors
 TILE_COLOR = "#0078D7"
