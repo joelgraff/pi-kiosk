@@ -26,6 +26,8 @@
 # - Moved update_file_list, toggle_source, update_source_button_style to source_screen.py to fix AttributeError.
 # - Styled USB/Internal buttons to match TV buttons, increased Back button font, reduced file list height,
 #   aligned file list top with TV buttons.
+# - Changed Schedule button background to gray, moved file listbox to top of VBoxLayout,
+#   moved Schedule to bottom-left and Back to bottom-right, set Back width to TV buttons.
 #
 # Dependencies:
 # - config.py: Filepaths, TV outputs, UI constants.
@@ -37,10 +39,10 @@ import logging
 import os
 from config import (
     VIDEO_DIR, ICON_DIR, ICON_FILES, TV_OUTPUTS, SOURCE_SCREEN_BACKGROUND,
-    TITLE_FONT, WIDGET_FONT, BACK_BUTTON_FONT, TEXT_COLOR, FILE_LIST_BORDER_COLOR,
+    TITLE_FONT, WIDGET_FONT, TEXT_COLOR, FILE_LIST_BORDER_COLOR,
     SCHEDULE_BUTTON_COLOR, PLAY_BUTTON_COLOR, STOP_BUTTON_COLOR, PLAYBACK_STATUS_COLORS,
     BACK_BUTTON_COLOR, FILE_LIST_HEIGHT, FILE_LIST_ITEM_HEIGHT,
-    SCHEDULE_BUTTON_SIZE, OUTPUT_BUTTON_SIZE, PLAY_STOP_BUTTON_SIZE, BACK_BUTTON_SIZE,
+    SCHEDULE_BUTTON_SIZE, OUTPUT_BUTTON_SIZE, PLAY_STOP_BUTTON_SIZE,
     ICON_SIZE, MAIN_LAYOUT_SPACING, TOP_LAYOUT_SPACING, OUTPUTS_CONTAINER_SPACING,
     OUTPUT_LAYOUT_SPACING, BUTTONS_LAYOUT_SPACING, RIGHT_LAYOUT_SPACING,
     BUTTON_PADDING, FILE_LIST_PADDING, BORDER_RADIUS, LOCAL_FILES_INPUT_NUM,
@@ -63,9 +65,6 @@ def setup_ui(self):
     title.setFont(QFont(*TITLE_FONT))
     title.setStyleSheet(f"color: {TEXT_COLOR}; background: transparent;")
     left_layout.addWidget(title)
-    
-    # Spacer to align file list with TV buttons (below Play/Stop)
-    left_layout.addSpacing(SCHEDULE_BUTTON_SIZE[1] + BUTTONS_LAYOUT_SPACING)
     
     self.file_list = QListWidget()
     self.file_list.setFont(QFont(*WIDGET_FONT))
@@ -168,7 +167,7 @@ def setup_ui(self):
             outputs_right_layout.addWidget(button)
     
     outputs_container.addLayout(outputs_left_layout)
-    outputs_container.addLayout(outputs_right_layout)
+    outputs_right_layout.addLayout(outputs_container)
     right_layout.addLayout(outputs_container)
     right_layout.addStretch()
     
@@ -176,11 +175,30 @@ def setup_ui(self):
     
     main_layout.addLayout(top_layout)
     
-    # Bottom layout: Back button (left), Playback state (center), Schedule button (right)
+    # Bottom layout: Schedule button (left), Playback state (center), Back button (right)
     bottom_layout = QHBoxLayout()
+    schedule_button = QPushButton("Schedule...")
+    schedule_button.setFont(QFont(*WIDGET_FONT))
+    schedule_button.setFixedSize(*SCHEDULE_BUTTON_SIZE)
+    schedule_button.setStyleSheet(f"""
+        QPushButton {{
+            background: {OUTPUT_BUTTON_COLORS['unselected']};
+            color: white;
+            border-radius: {BORDER_RADIUS}px;
+            padding: {BUTTON_PADDING['schedule_output']}px;
+        }}
+    """)
+    schedule_button.clicked.connect(lambda: open_schedule_dialog(self))
+    bottom_layout.addWidget(schedule_button)
+    
+    self.playback_state_label = QLabel("Playback: Stopped")
+    self.playback_state_label.setFont(QFont(*WIDGET_FONT))
+    self.playback_state_label.setStyleSheet(f"color: {PLAYBACK_STATUS_COLORS['stopped']};")
+    bottom_layout.addWidget(self.playback_state_label)
+    
     back_button = QPushButton("Back")
-    back_button.setFont(QFont(*WIDGET_FONT))  # Match other buttons
-    back_button.setFixedSize(BACK_BUTTON_SIZE[0], SCHEDULE_BUTTON_SIZE[1])  # Match Schedule height
+    back_button.setFont(QFont(*WIDGET_FONT))
+    back_button.setFixedSize(OUTPUT_BUTTON_SIZE[0], SCHEDULE_BUTTON_SIZE[1])  # Match TV width, Schedule height
     back_button.setStyleSheet(f"""
         QPushButton {{
             background: {BACK_BUTTON_COLOR};
@@ -191,25 +209,6 @@ def setup_ui(self):
     """)
     back_button.clicked.connect(self.parent.show_controls)
     bottom_layout.addWidget(back_button)
-    
-    self.playback_state_label = QLabel("Playback: Stopped")
-    self.playback_state_label.setFont(QFont(*WIDGET_FONT))
-    self.playback_state_label.setStyleSheet(f"color: {PLAYBACK_STATUS_COLORS['stopped']};")
-    bottom_layout.addWidget(self.playback_state_label)
-    
-    schedule_button = QPushButton("Schedule...")
-    schedule_button.setFont(QFont(*WIDGET_FONT))
-    schedule_button.setFixedSize(*SCHEDULE_BUTTON_SIZE)
-    schedule_button.setStyleSheet(f"""
-        QPushButton {{
-            background: {SCHEDULE_BUTTON_COLOR};
-            color: {TEXT_COLOR};
-            border-radius: {BORDER_RADIUS}px;
-            padding: {BUTTON_PADDING['schedule_output']}px;
-        }}
-    """)
-    schedule_button.clicked.connect(lambda: open_schedule_dialog(self))
-    bottom_layout.addWidget(schedule_button)
     
     main_layout.addLayout(bottom_layout)
     
