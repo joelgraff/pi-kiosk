@@ -17,8 +17,8 @@
 # - Moved event handlers to source_screen.py to fix AttributeError.
 # - Added placeholder QMessageBox and enhanced logging for Schedule dialog.
 # - Moved placeholder to except blocks and added window flags logging.
-# - Added dialog.show(), raise_(), activateWindow(), and finished signal.
-# - Added showEvent/closeEvent logging, focus tracking, test dialog, and centered geometry.
+# - Added dialog.show(), raise_(), activateWindow(), and centered geometry.
+# - Removed test dialog, DebugScheduleDialog, and excessive logging for final implementation.
 #
 # Dependencies:
 # - config.py: Filepaths, TV outputs, UI constants.
@@ -249,37 +249,10 @@ def file_selected(self, item):
 
 def open_schedule_dialog(self):
     logging.debug("SourceScreen: Schedule button clicked")
-    # Test dialog to verify Qt rendering
-    test_dialog = QDialog(self.widget)
-    test_dialog.setWindowTitle("Test Dialog")
-    test_dialog.setFixedSize(200, 100)
-    layout = QVBoxLayout(test_dialog)
-    label = QLabel("Testing Qt dialog rendering")
-    label.setFont(QFont(*WIDGET_FONT))
-    layout.addWidget(label)
-    test_dialog.setModal(True)
-    logging.debug("SourceScreen: Showing test dialog")
-    test_dialog.show()
-    test_dialog.raise_()
-    test_dialog.activateWindow()
-    test_result = test_dialog.exec_()
-    logging.debug(f"SourceScreen: Test dialog closed with result: {test_result}")
-    
     try:
         from schedule_dialog import ScheduleDialog
         logging.debug("SourceScreen: Successfully imported ScheduleDialog")
-        
-        # Extend ScheduleDialog to log events
-        class DebugScheduleDialog(ScheduleDialog):
-            def showEvent(self, event):
-                logging.debug(f"ScheduleDialog: Show event triggered, visible={self.isVisible()}")
-                super().showEvent(event)
-            
-            def closeEvent(self, event):
-                logging.debug(f"ScheduleDialog: Close event triggered, result={self.result()}")
-                super().closeEvent(event)
-        
-        dialog = DebugScheduleDialog(self.parent, LOCAL_FILES_INPUT_NUM)
+        dialog = ScheduleDialog(self.parent, LOCAL_FILES_INPUT_NUM)
         dialog.setModal(True)
         dialog.setFixedSize(300, 200)
         dialog.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint)
@@ -287,8 +260,7 @@ def open_schedule_dialog(self):
         parent_geo = self.parent.geometry()
         dialog.move(parent_geo.center() - dialog.rect().center())
         dialog.setVisible(True)
-        logging.debug(f"SourceScreen: Schedule dialog initialized for Input {LOCAL_FILES_INPUT_NUM}, modal={dialog.isModal()}, visible={dialog.isVisible()}, flags={dialog.windowFlags()}, parent={dialog.parent()}, geometry={dialog.geometry()}, hasFocus={dialog.hasFocus()}")
-        dialog.finished.connect(lambda result: logging.debug(f"SourceScreen: Schedule dialog finished with result: {result}"))
+        logging.debug(f"SourceScreen: Schedule dialog initialized for Input {LOCAL_FILES_INPUT_NUM}")
         dialog.show()
         dialog.raise_()
         dialog.activateWindow()
