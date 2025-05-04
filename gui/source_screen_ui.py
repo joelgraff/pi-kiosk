@@ -2,7 +2,7 @@
 #
 # Overview:
 # Defines the setup_ui function for the Local Files screen.
-# Sets up file list, TV output toggles, Play/Stop/Schedule buttons, Back button, and status labels.
+# Sets up file list, TV output toggles, Play/Stop/Schedule buttons, Back button, and playback state label.
 #
 # Recent Changes (as of June 2025):
 # - Fixed 'setAlignment' error on Back button using QHBoxLayout.
@@ -19,6 +19,8 @@
 # - Moved placeholder to except blocks and added window flags logging.
 # - Added dialog.show(), raise_(), activateWindow(), and centered geometry.
 # - Removed test dialog, DebugScheduleDialog, and excessive logging for final implementation.
+# - Removed "TV" label, changed "Local Files" to "Select File", moved Back button to bottom-left,
+#   eliminated Sync notification, moved Play/Stop to top-right, moved Schedule below TV outputs.
 #
 # Dependencies:
 # - config.py: Filepaths, TV outputs, UI constants.
@@ -31,8 +33,8 @@ import os
 from config import (
     VIDEO_DIR, ICON_DIR, ICON_FILES, TV_OUTPUTS, SOURCE_SCREEN_BACKGROUND,
     TITLE_FONT, WIDGET_FONT, BACK_BUTTON_FONT, TEXT_COLOR, FILE_LIST_BORDER_COLOR,
-    SCHEDULE_BUTTON_COLOR, PLAY_BUTTON_COLOR, STOP_BUTTON_COLOR, SYNC_STATUS_COLOR,
-    PLAYBACK_STATUS_COLORS, BACK_BUTTON_COLOR, FILE_LIST_HEIGHT, FILE_LIST_ITEM_HEIGHT,
+    SCHEDULE_BUTTON_COLOR, PLAY_BUTTON_COLOR, STOP_BUTTON_COLOR, PLAYBACK_STATUS_COLORS,
+    BACK_BUTTON_COLOR, FILE_LIST_HEIGHT, FILE_LIST_ITEM_HEIGHT,
     SCHEDULE_BUTTON_SIZE, OUTPUT_BUTTON_SIZE, PLAY_STOP_BUTTON_SIZE, BACK_BUTTON_SIZE,
     ICON_SIZE, MAIN_LAYOUT_SPACING, TOP_LAYOUT_SPACING, OUTPUTS_CONTAINER_SPACING,
     OUTPUT_LAYOUT_SPACING, BUTTONS_LAYOUT_SPACING, RIGHT_LAYOUT_SPACING,
@@ -49,9 +51,9 @@ def setup_ui(self):
     top_layout = QHBoxLayout()
     top_layout.setSpacing(TOP_LAYOUT_SPACING)
     
-    # Left side: File list and Schedule button
+    # Left side: File list
     left_layout = QVBoxLayout()
-    title = QLabel(self.source_name)
+    title = QLabel("Select File")
     title.setFont(QFont(*TITLE_FONT))
     title.setStyleSheet(f"color: {TEXT_COLOR}; background: transparent;")
     left_layout.addWidget(title)
@@ -97,77 +99,12 @@ def setup_ui(self):
             self.file_list.addItem("Error loading files")
     self.file_list.itemClicked.connect(lambda item: file_selected(self, item))
     left_layout.addWidget(self.file_list)
-    
-    schedule_button = QPushButton("Schedule...")
-    schedule_button.setFont(QFont(*WIDGET_FONT))
-    schedule_button.setFixedSize(*SCHEDULE_BUTTON_SIZE)
-    schedule_button.setStyleSheet(f"""
-        QPushButton {{
-            background: {SCHEDULE_BUTTON_COLOR};
-            color: {TEXT_COLOR};
-            border-radius: {BORDER_RADIUS}px;
-            padding: {BUTTON_PADDING['schedule_output']}px;
-        }}
-    """)
-    schedule_button.clicked.connect(lambda: open_schedule_dialog(self))
-    left_layout.addWidget(schedule_button)
     left_layout.addStretch()
     
     top_layout.addLayout(left_layout, 1)
     
-    # Right side: Back button, TV label, outputs, and buttons
+    # Right side: Play/Stop buttons, TV outputs, Schedule button
     right_layout = QVBoxLayout()
-    back_button = QPushButton("Back")
-    back_button.setFont(QFont(*BACK_BUTTON_FONT))
-    back_button.setFixedSize(*BACK_BUTTON_SIZE)
-    back_button.setStyleSheet(f"""
-        QPushButton {{
-            background: {BACK_BUTTON_COLOR};
-            color: {TEXT_COLOR};
-            border-radius: {BORDER_RADIUS}px;
-            padding: {BUTTON_PADDING['back']}px;
-        }}
-    """)
-    back_button.clicked.connect(self.parent.show_controls)
-    back_button_layout = QHBoxLayout()
-    back_button_layout.addStretch()
-    back_button_layout.addWidget(back_button)
-    right_layout.addLayout(back_button_layout)
-    
-    outputs_label = QLabel("TV")
-    outputs_label.setFont(QFont(*TITLE_FONT))
-    outputs_label.setStyleSheet(f"color: {TEXT_COLOR}; background: transparent;")
-    outputs_label.setAlignment(Qt.AlignCenter)
-    right_layout.addWidget(outputs_label)
-    
-    # Outputs: Two columns (Fellowship 1/Nursery, Fellowship 2/Sanctuary)
-    outputs_container = QHBoxLayout()
-    outputs_container.setSpacing(OUTPUTS_CONTAINER_SPACING)
-    
-    outputs_left_layout = QVBoxLayout()
-    outputs_left_layout.setSpacing(OUTPUT_LAYOUT_SPACING)
-    outputs_right_layout = QVBoxLayout()
-    outputs_right_layout.setSpacing(OUTPUT_LAYOUT_SPACING)
-    
-    self.output_buttons = {name: QPushButton(name) for name in TV_OUTPUTS}
-    for name, button in self.output_buttons.items():
-        button.setFont(QFont(*WIDGET_FONT))
-        button.setFixedSize(*OUTPUT_BUTTON_SIZE)
-        button.setCheckable(True)
-        output_idx = TV_OUTPUTS[name]
-        is_current = 2 in self.parent.input_output_map and output_idx in self.parent.input_output_map.get(2, [])
-        is_other = any(other_input != 2 and output_idx in self.parent.input_output_map.get(other_input, []) and self.parent.active_inputs.get(other_input, False) for other_input in self.parent.input_output_map)
-        self.update_output_button_style(name, is_current, is_other)
-        button.clicked.connect(lambda checked, n=name: self.toggle_output(n, checked))
-        if name in ["Fellowship 1", "Nursery"]:
-            outputs_left_layout.addWidget(button)
-        else:
-            outputs_right_layout.addWidget(button)
-    
-    outputs_container.addLayout(outputs_left_layout)
-    outputs_container.addLayout(outputs_right_layout)
-    right_layout.addLayout(outputs_container)
-    right_layout.addSpacing(RIGHT_LAYOUT_SPACING)
     
     # Play/Stop buttons (horizontal)
     buttons_layout = QHBoxLayout()
@@ -206,19 +143,71 @@ def setup_ui(self):
             self.stop_button = button
             button.clicked.connect(self.on_stop_clicked)
         buttons_layout.addWidget(button)
-    
     right_layout.addLayout(buttons_layout)
+    
+    # TV Outputs: Two columns (Fellowship 1/Nursery, Fellowship 2/Sanctuary)
+    outputs_container = QHBoxLayout()
+    outputs_container.setSpacing(OUTPUTS_CONTAINER_SPACING)
+    
+    outputs_left_layout = QVBoxLayout()
+    outputs_left_layout.setSpacing(OUTPUT_LAYOUT_SPACING)
+    outputs_right_layout = QVBoxLayout()
+    outputs_right_layout.setSpacing(OUTPUT_LAYOUT_SPACING)
+    
+    self.output_buttons = {name: QPushButton(name) for name in TV_OUTPUTS}
+    for name, button in self.output_buttons.items():
+        button.setFont(QFont(*WIDGET_FONT))
+        button.setFixedSize(*OUTPUT_BUTTON_SIZE)
+        button.setCheckable(True)
+        output_idx = TV_OUTPUTS[name]
+        is_current = 2 in self.parent.input_output_map and output_idx in self.parent.input_output_map.get(2, [])
+        is_other = any(other_input != 2 and output_idx in self.parent.input_output_map.get(other_input, []) and self.parent.active_inputs.get(other_input, False) for other_input in self.parent.input_output_map)
+        self.update_output_button_style(name, is_current, is_other)
+        button.clicked.connect(lambda checked, n=name: self.toggle_output(n, checked))
+        if name in ["Fellowship 1", "Nursery"]:
+            outputs_left_layout.addWidget(button)
+        else:
+            outputs_right_layout.addWidget(button)
+    
+    outputs_container.addLayout(outputs_left_layout)
+    outputs_container.addLayout(outputs_right_layout)
+    right_layout.addLayout(outputs_container)
+    
+    # Schedule button
+    schedule_button = QPushButton("Schedule...")
+    schedule_button.setFont(QFont(*WIDGET_FONT))
+    schedule_button.setFixedSize(*SCHEDULE_BUTTON_SIZE)
+    schedule_button.setStyleSheet(f"""
+        QPushButton {{
+            background: {SCHEDULE_BUTTON_COLOR};
+            color: {TEXT_COLOR};
+            border-radius: {BORDER_RADIUS}px;
+            padding: {BUTTON_PADDING['schedule_output']}px;
+        }}
+    """)
+    schedule_button.clicked.connect(lambda: open_schedule_dialog(self))
+    right_layout.addWidget(schedule_button)
+    
     right_layout.addStretch()
     top_layout.addLayout(right_layout, 1)
     
     main_layout.addLayout(top_layout)
     
-    # Bottom layout: Status messages
+    # Bottom layout: Back button (left), Playback state (right)
     bottom_layout = QHBoxLayout()
-    self.sync_status_label = QLabel("Sync: Idle")
-    self.sync_status_label.setFont(QFont(*WIDGET_FONT))
-    self.sync_status_label.setStyleSheet(f"color: {SYNC_STATUS_COLOR}; background: transparent;")
-    bottom_layout.addWidget(self.sync_status_label)
+    back_button = QPushButton("Back")
+    back_button.setFont(QFont(*BACK_BUTTON_FONT))
+    back_button.setFixedSize(*BACK_BUTTON_SIZE)
+    back_button.setStyleSheet(f"""
+        QPushButton {{
+            background: {BACK_BUTTON_COLOR};
+            color: {TEXT_COLOR};
+            border-radius: {BORDER_RADIUS}px;
+            padding: {BUTTON_PADDING['back']}px;
+        }}
+    """)
+    back_button.clicked.connect(self.parent.show_controls)
+    bottom_layout.addWidget(back_button)
     
     bottom_layout.addStretch()
     
@@ -268,7 +257,7 @@ def open_schedule_dialog(self):
         logging.debug(f"SourceScreen: Schedule dialog closed with result: {result}")
     except ImportError as e:
         logging.error(f"SourceScreen: Failed to import ScheduleDialog: {e}")
-        self.sync_status_label.setText("Schedule unavailable")
+        self.playback_state_label.setText("Schedule unavailable")
         placeholder = QMessageBox(self.widget)
         placeholder.setWindowTitle("Schedule Error")
         placeholder.setText("Scheduling is unavailable: Module not found")
@@ -278,7 +267,7 @@ def open_schedule_dialog(self):
         logging.debug("SourceScreen: Placeholder dialog displayed for ImportError")
     except Exception as e:
         logging.error(f"SourceScreen: Failed to open ScheduleDialog: {e}")
-        self.sync_status_label.setText("Schedule error")
+        self.playback_state_label.setText("Schedule error")
         # Fallback QDialog
         fallback_dialog = QDialog(self.widget)
         fallback_dialog.setWindowTitle("Schedule Fallback")
