@@ -7,10 +7,10 @@
 # Environment:
 # - Raspberry Pi 5, X11 (QT_QPA_PLATFORM=xcb), PyQt5, 787x492px window.
 # - Logs: /home/admin/kiosk/logs/kiosk.log.
-# - Icons: /home/admin/kiosk/icons (128x128px).
+# - Icons: /home/admin/kiosk/gui/icons (128x128px).
 # - Videos: /home/admin/videos (Internal), /media/admin/<drive> (USB).
 #
-# Recent Changes (as of June 2025):
+# Recent Changes (as of May 2025):
 # - Added import os for QT_SCALE_FACTOR logging.
 # - Moved setup_ui import to top for early error detection.
 # - Enhanced import logging to debug circular imports.
@@ -20,6 +20,8 @@
 # - Added update_file_list, toggle_source, update_source_button_style for USB/Internal toggles.
 # - Refined toggle_source and update_source_button_style for consistent styling and always-selected state.
 # - Added gray text (#808080) for disabled USB button when no USB stick is inserted.
+# - Moved update_file_list call to setup_ui to fix AttributeError.
+# - Updated ICON_DIR to /home/admin/kiosk/gui/icons.
 #
 # Dependencies:
 # - PyQt5: GUI framework.
@@ -67,6 +69,7 @@ class SourceScreen:
     def setup_ui(self):
         try:
             setup_ui(self)
+            self.update_file_list()  # Populate file list after UI setup
         except Exception as e:
             logging.error(f"SourceScreen: Failed to execute setup_ui: {e}")
             raise
@@ -80,7 +83,7 @@ class SourceScreen:
         self.playback_state_label.setText(f"Playback: {state}")
         self.playback_state_label.setStyleSheet(f"color: {PLAYBACK_STATUS_COLORS[state.lower()]}; background: transparent;")
         icon_file = ICON_FILES["pause"] if is_playing else ICON_FILES["play"]
-        icon_path = os.path.join(ICON_DIR, icon_file)
+        icon_path = os.path.join("/home/admin/kiosk/gui/icons", icon_file)  # Updated ICON_DIR
         qt_icon = QStyle.SP_MediaPause if is_playing else QStyle.SP_MediaPlay
         if os.path.exists(icon_path):
             self.play_button.setIcon(QIcon(icon_path))
@@ -196,3 +199,32 @@ class SourceScreen:
                 padding: {BUTTON_PADDING['schedule_output']}px;
             }}
         """)
+
+    def update_file_list(self):
+        self.file_list.clear()
+        source_path = self.source_paths[self.current_source]
+        if not source_path or not os.path.exists(source_path):
+            logging.error(f"SourceScreen: Source directory does not exist: {source_path}")
+            self.file_list.addItem("No directory found")
+            return
+        if not os.access(source_path, os.R_OK):
+            logging.error(f"SourceScreen: No read permission for directory: {source_path}")
+            self.file_list.addItem("No permission to access directory")
+            return
+        try:
+            video_extensions = ('.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv',
+                                '.MP4', '.MKV', '.AVI', '.MOV', '.WMV', '.FLV')
+            files = os.listdir(source_path)
+            logging.debug(f"SourceScreen: Files in {source_path}: {files}")
+            files_found = False
+            for file_name in files:
+                if any(file_name.endswith(ext) for ext in video_extensions):
+                    self.file_list.addItem(file_name)
+                    logging.debug(f"SourceScreen: Added file to list: {file_name}")
+                    files_found = True
+            if not files_found:
+                logging.warning(f"SourceScreen: No video files found in {source_path}")
+                self.file_list.addItem("No video files found")
+        except Exception as e:
+            logging.error(f"SourceScreen: Failed to list files in {source_path}: {e}")
+            self.file_list.addItem("Error loading files")

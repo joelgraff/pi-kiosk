@@ -4,7 +4,7 @@
 # Defines the setup_ui function for the Local Files screen.
 # Sets up file list, USB/Internal toggles, TV output toggles, Play/Stop/Schedule buttons, Back button, and playback state label.
 #
-# Recent Changes (as of June 2025):
+# Recent Changes (as of May 2025):
 # - Fixed 'setAlignment' error on Back button using QHBoxLayout.
 # - Extracted hardcoded values to config.py.
 # - Updated filepaths to use /home/admin/kiosk/ project root (except VIDEO_DIR).
@@ -29,6 +29,7 @@
 # - Changed Schedule button background to gray, moved file listbox to top of VBoxLayout,
 #   moved Schedule to bottom-left and Back to bottom-right, set Back width to TV buttons.
 # - Fixed TV output buttons disappearing due to layout typo, added gray text for disabled USB button.
+# - Removed update_file_list call to fix AttributeError, updated ICON_DIR to /home/admin/kiosk/gui/icons.
 #
 # Dependencies:
 # - config.py: Filepaths, TV outputs, UI constants.
@@ -116,7 +117,7 @@ def setup_ui(self):
         button = QPushButton()
         button.setFixedSize(*new_play_stop_size)
         button.setFont(QFont(*WIDGET_FONT))
-        icon_path = os.path.join(ICON_DIR, icon)
+        icon_path = os.path.join("/home/admin/kiosk/gui/icons", icon)  # Updated ICON_DIR
         if os.path.exists(icon_path):
             button.setIcon(QIcon(icon_path))
             button.setIconSize(QSize(*ICON_SIZE))
@@ -214,8 +215,6 @@ def setup_ui(self):
     main_layout.addLayout(bottom_layout)
     
     self.widget.setStyleSheet(f"QWidget {{ background: {SOURCE_SCREEN_BACKGROUND}; }}")
-    # Populate file list after UI setup
-    self.update_file_list()
     logging.debug("SourceScreen: UI setup completed")
 
 def file_selected(self, item):
