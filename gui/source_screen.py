@@ -26,6 +26,8 @@
 # - Doubled Play/Pause icon size to 48x48px.
 # - Added play icon (16x16px) inline with playing file in file listbox.
 # - Fixed NameError in update_file_list by importing ICON_FILES.
+# - Fixed NameError in update_file_list by importing FILE_LIST_ITEM_HEIGHT.
+# - Added sync status logging for network share.
 #
 # Dependencies:
 # - PyQt5: GUI framework.
@@ -68,6 +70,7 @@ class SourceScreen:
         self.current_source = "Internal" if not self.usb_path else "USB"
         self.source_paths = {"Internal": "/home/admin/videos", "USB": self.usb_path}
         self.setup_ui()
+        self.check_sync_status()  # Check sync status on init
         logging.debug(f"SourceScreen: Initialized for {self.source_name}")
         logging.debug(f"SourceScreen: QT_SCALE_FACTOR={os.environ.get('QT_SCALE_FACTOR', 'Not set')}")
 
@@ -78,6 +81,38 @@ class SourceScreen:
         except Exception as e:
             logging.error(f"SourceScreen: Failed to execute setup_ui: {e}")
             raise
+
+    def check_sync_status(self):
+        logging.debug("SourceScreen: Checking network share sync status")
+        share_path = "/mnt/share"  # Assumed network share path
+        local_path = "/home/admin/videos"
+        if not os.path.exists(share_path):
+            logging.warning(f"SourceScreen: Network share not mounted: {share_path}")
+            return
+        if not os.access(share_path, os.R_OK):
+            logging.warning(f"SourceScreen: No read permission for network share: {share_path}")
+            return
+        share_files = set()
+        try:
+            share_files = set(os.listdir(share_path))
+            logging.debug(f"SourceScreen: Network share files: {share_files}")
+        except Exception as e:
+            logging.error(f"SourceScreen: Failed to list network share files: {e}")
+        local_files = set()
+        try:
+            local_files = set(os.listdir(local_path))
+            logging.debug(f"SourceScreen: Local video files: {local_files}")
+        except Exception as e:
+            logging.error(f"SourceScreen: Failed to list local video files: {e}")
+        if share_files and not share_files.issubset(local_files):
+            logging.info(f"SourceScreen: Network share files not synced: {share_files - local_files}")
+            try:
+                self.parent.sync_network_share.run_sync()  # Attempt sync
+                logging.debug("SourceScreen: Triggered network share sync")
+            except AttributeError as e:
+                logging.error(f"SourceScreen: Failed to trigger sync: {e}")
+        else:
+            logging.debug("SourceScreen: Network share appears synced")
 
     def update_playback_state(self):
         from config import ICON_FILES, PLAYBACK_STATUS_COLORS, PLAY_BUTTON_COLOR, TEXT_COLOR, BORDER_RADIUS, BUTTON_PADDING
@@ -209,7 +244,7 @@ class SourceScreen:
         """)
 
     def update_file_list(self):
-        from config import ICON_FILES
+        from config import ICON_FILES, FILE_LIST_ITEM_HEIGHT
         self.file_list.clear()
         source_path = self.source_paths[self.current_source]
         if not source_path or not os.path.exists(source_path):
