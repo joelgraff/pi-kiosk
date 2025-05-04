@@ -37,7 +37,7 @@
 
 from PyQt5.QtWidgets import QWidget, QListWidgetItem
 from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal, QObject
 import logging
 import os
 import sys
