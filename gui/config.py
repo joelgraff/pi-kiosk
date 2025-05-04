@@ -71,6 +71,7 @@ MAIN_WINDOW_GRADIENT = """
         stop:0 #0078D7, stop:1 #003087
     );
 """  # Blue gradient for main window
+LABEL_COLOR = "white"  # Color for QLabel text
 
 # Colors
 TILE_COLOR = "#0078D7"
