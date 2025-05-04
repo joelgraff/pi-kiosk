@@ -8,7 +8,7 @@
 # - Raspberry Pi 5, X11 (QT_QPA_PLATFORM=xcb), PyQt5, 787x492px window.
 # - Logs: /home/admin/kiosk/logs/kiosk.log.
 # - Icons: /home/admin/kiosk/icons (128x128px).
-# - Videos: /home/admin/videos.
+# - Videos: /home/admin/videos (Internal), /media/admin/<drive> (USB).
 #
 # Recent Changes (as of June 2025):
 # - Added import os for QT_SCALE_FACTOR logging.
@@ -17,6 +17,7 @@
 # - Added event handlers (update_playback_state, on_play_clicked, on_stop_clicked,
 #   toggle_output, update_output_button_style) to fix AttributeError.
 # - Added MPV --fs-screen=n logic for multi-screen playback.
+# - Added update_file_list, toggle_source, update_source_button_style for USB/Internal toggles.
 #
 # Dependencies:
 # - PyQt5: GUI framework.
@@ -25,7 +26,7 @@
 
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import QSize
+from PyQt5.QtCore import Qt, QSize
 import logging
 import os
 import sys
@@ -45,11 +46,18 @@ class SourceScreen:
         self.source_name = source_name
         self.widget = QWidget()
         self.output_buttons = {}  # Store output toggle buttons
+        self.source_buttons = {}  # Store USB/Internal toggle buttons
         self.file_list = None  # Set in setup_ui
         self.play_button = None  # Set in setup_ui
         self.stop_button = None  # Set in setup_ui
-        self.sync_status_label = None  # Set in setup_ui
         self.playback_state_label = None  # Set in setup_ui
+        # Initialize USB/Internal state
+        self.usb_path = None
+        usb_base = "/media/admin/"
+        if os.path.exists(usb_base) and os.listdir(usb_base):
+            self.usb_path = os.path.join(usb_base, os.listdir(usb_base)[0])
+        self.current_source = "Internal" if not self.usb_path else "USB"
+        self.source_paths = {"Internal": "/home/admin/videos", "USB": self.usb_path}
         self.setup_ui()
         logging.debug(f"SourceScreen: Initialized for {self.source_name}")
         logging.debug(f"SourceScreen: QT_SCALE_FACTOR={os.environ.get('QT_SCALE_FACTOR', 'Not set')}")
@@ -106,7 +114,7 @@ class SourceScreen:
                             hdmi_map[hdmi_idx] = []
                         hdmi_map[hdmi_idx].append(output_idx)
             logging.debug(f"SourceScreen: Playback HDMI map: {hdmi_map}")
-            file_path = os.path.join(VIDEO_DIR, self.file_list.currentItem().text())
+            file_path = os.path.join(self.source_paths[self.current_source], self.file_list.currentItem().text())
             # Pass file path and hdmi_map to toggle_play_pause
             self.parent.playback.toggle_play_pause(self.source_name, file_path, hdmi_map)
             self.update_playback_state()
@@ -159,3 +167,58 @@ class SourceScreen:
             }}
         """)
         button.setChecked(is_current or is_other)
+
+    def toggle_source(self, source_name, checked):
+        from config import OUTPUT_BUTTON_COLORS, BORDER_RADIUS, BUTTON_PADDING
+        if checked:
+            self.current_source = source_name
+            for name, button in self.source_buttons.items():
+                button.setChecked(name == source_name)
+                self.update_source_button_style(name, name == source_name)
+            logging.debug(f"SourceScreen: Switched to source: {source_name}")
+            self.update_file_list()
+        else:
+            # Prevent unchecking the current source
+            self.source_buttons[source_name].setChecked(True)
+
+    def update_source_button_style(self, name, is_selected):
+        from config import OUTPUT_BUTTON_COLORS, BORDER_RADIUS, BUTTON_PADDING
+        button = self.source_buttons[name]
+        color = OUTPUT_BUTTON_COLORS["selected"] if is_selected else OUTPUT_BUTTON_COLORS["unselected"]
+        button.setStyleSheet(f"""
+            QPushButton {{
+                background: {color};
+                color: white;
+                border-radius: {BORDER_RADIUS}px;
+                padding: {BUTTON_PADDING['schedule_output']}px;
+            }}
+        """)
+
+    def update_file_list(self):
+        self.file_list.clear()
+        source_path = self.source_paths[self.current_source]
+        if not source_path or not os.path.exists(source_path):
+            logging.error(f"SourceScreen: Source directory does not exist: {source_path}")
+            self.file_list.addItem("No directory found")
+            return
+        if not os.access(source_path, os.R_OK):
+            logging.error(f"SourceScreen: No read permission for directory: {source_path}")
+            self.file_list.addItem("No permission to access directory")
+            return
+        try:
+            video_extensions = ('.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv',
+                                '.MP4', '.MKV', '.AVI', '.MOV', '.WMV', '.FLV')
+            files = os.listdir(source_path)
+            logging.debug(f"SourceScreen: Files in {source_path}: {files}")
+            files_found = False
+            for file_name in files:
+                if any(file_name.endswith(ext) for ext in video_extensions):
+                    self.file_list.addItem(file_name)
+                    logging.debug(f"SourceScreen: Added file to list: {file_name}")
+                    files_found = True
+            if not files_found:
+                logging.warning(f"SourceScreen: No video files found in {source_path}")
+                self.file_list.addItem("No video files found")
+        except Exception as e:
+            logging.error(f"SourceScreen: Failed to list files in {source_path}: {e}")
+            self.file_list.addItem("Error loading files")

@@ -23,6 +23,7 @@
 #   eliminated Sync notification, moved Play/Stop to top-right, moved Schedule below TV outputs.
 # - Moved Schedule to bottom-right, positioned Playback between Schedule/Back, matched Back/Schedule heights,
 #   reduced Play/Stop height, widened Play/Stop to match TV buttons, added USB/Internal toggles.
+# - Moved update_file_list, toggle_source, update_source_button_style to source_screen.py to fix AttributeError.
 #
 # Dependencies:
 # - config.py: Filepaths, TV outputs, UI constants.
@@ -73,18 +74,6 @@ def setup_ui(self):
         }}
         QListWidget::item {{ height: {FILE_LIST_ITEM_HEIGHT}px; padding: {FILE_LIST_PADDING}px; }}
     """)
-    
-    # USB detection
-    self.usb_path = None
-    usb_base = "/media/admin/"
-    if os.path.exists(usb_base) and os.listdir(usb_base):
-        self.usb_path = os.path.join(usb_base, os.listdir(usb_base)[0])
-    
-    self.current_source = "Internal" if not self.usb_path else "USB"
-    self.source_paths = {"Internal": VIDEO_DIR, "USB": self.usb_path}
-    
-    # Populate file list
-    self.update_file_list()
     self.file_list.itemClicked.connect(lambda item: file_selected(self, item))
     left_layout.addWidget(self.file_list)
     
@@ -98,7 +87,6 @@ def setup_ui(self):
         button.setCheckable(True)
         button.setChecked(name == self.current_source)
         button.setEnabled(name != "USB" or self.usb_path is not None)
-        self.update_source_button_style(name, button.isChecked())
         button.clicked.connect(lambda checked, n=name: self.toggle_source(n, checked))
         source_layout.addWidget(button)
     left_layout.addLayout(source_layout)
@@ -236,59 +224,6 @@ def file_selected(self, item):
         if self.play_button and self.stop_button:
             self.play_button.setEnabled(False)
             self.stop_button.setEnabled(False)
-
-def toggle_source(self, source_name, checked):
-    if checked:
-        self.current_source = source_name
-        for name, button in self.source_buttons.items():
-            button.setChecked(name == source_name)
-            self.update_source_button_style(name, name == source_name)
-        logging.debug(f"SourceScreen: Switched to source: {source_name}")
-        self.update_file_list()
-    else:
-        # Prevent unchecking the current source
-        self.source_buttons[source_name].setChecked(True)
-
-def update_source_button_style(self, name, is_selected):
-    button = self.source_buttons[name]
-    color = OUTPUT_BUTTON_COLORS["selected"] if is_selected else OUTPUT_BUTTON_COLORS["unselected"]
-    button.setStyleSheet(f"""
-        QPushButton {{
-            background: {color};
-            color: white;
-            border-radius: {BORDER_RADIUS}px;
-            padding: {BUTTON_PADDING['schedule_output']}px;
-        }}
-    """)
-
-def update_file_list(self):
-    self.file_list.clear()
-    source_path = self.source_paths[self.current_source]
-    if not source_path or not os.path.exists(source_path):
-        logging.error(f"SourceScreen: Source directory does not exist: {source_path}")
-        self.file_list.addItem("No directory found")
-        return
-    if not os.access(source_path, os.R_OK):
-        logging.error(f"SourceScreen: No read permission for directory: {source_path}")
-        self.file_list.addItem("No permission to access directory")
-        return
-    try:
-        video_extensions = ('.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv',
-                            '.MP4', '.MKV', '.AVI', '.MOV', '.WMV', '.FLV')
-        files = os.listdir(source_path)
-        logging.debug(f"SourceScreen: Files in {source_path}: {files}")
-        files_found = False
-        for file_name in files:
-            if any(file_name.endswith(ext) for ext in video_extensions):
-                self.file_list.addItem(file_name)
-                logging.debug(f"SourceScreen: Added file to list: {file_name}")
-                files_found = True
-        if not files_found:
-            logging.warning(f"SourceScreen: No video files found in {source_path}")
-            self.file_list.addItem("No video files found")
-    except Exception as e:
-        logging.error(f"SourceScreen: Failed to list files in {source_path}: {e}")
-        self.file_list.addItem("Error loading files")
 
 def open_schedule_dialog(self):
     logging.debug("SourceScreen: Schedule button clicked")
