@@ -34,6 +34,7 @@
 # - Aligned file listbox top with TV buttons, repositioned USB/Internal buttons equidistant between file listbox and Schedule.
 # - Corrected file listbox top alignment to match Fellowship 1/2 buttons, adjusted USB/Internal buttons downward with OUTPUT_LAYOUT_SPACING.
 # - Moved Schedule button next to Back button, moved Playback State label to bottom-left.
+# - Prevented selecting error messages in file listbox.
 #
 # Dependencies:
 # - config.py: Filepaths, TV outputs, UI constants.
@@ -232,7 +233,8 @@ def setup_ui(self):
 
 def file_selected(self, item):
     logging.debug(f"SourceScreen: File selected: {item.text()}")
-    if self.source_name == "Local Files":
+    invalid_items = ["No directory found", "No permission to access directory", "No video files found", "Error loading files"]
+    if self.source_name == "Local Files" and item.text() not in invalid_items:
         file_path = os.path.join(self.source_paths[self.current_source], item.text())
         self.parent.input_paths[LOCAL_FILES_INPUT_NUM] = file_path
         logging.debug(f"SourceScreen: Selected file path: {file_path}")
@@ -240,7 +242,7 @@ def file_selected(self, item):
             self.play_button.setEnabled(True)
             self.stop_button.setEnabled(True)
     else:
-        # Disable Play/Stop for non-video items (e.g., placeholder messages)
+        # Disable Play/Stop for non-video items or invalid messages
         if self.play_button and self.stop_button:
             self.play_button.setEnabled(False)
             self.stop_button.setEnabled(False)

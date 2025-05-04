@@ -25,6 +25,7 @@
 # - Scaled Play/Pause icons to 24x24px, adjusted disabled USB text to #A0A0A0.
 # - Doubled Play/Pause icon size to 48x48px.
 # - Added play icon (16x16px) inline with playing file in file listbox.
+# - Fixed NameError in update_file_list by importing ICON_FILES.
 #
 # Dependencies:
 # - PyQt5: GUI framework.
@@ -208,6 +209,7 @@ class SourceScreen:
         """)
 
     def update_file_list(self):
+        from config import ICON_FILES
         self.file_list.clear()
         source_path = self.source_paths[self.current_source]
         if not source_path or not os.path.exists(source_path):
@@ -224,11 +226,11 @@ class SourceScreen:
             files = os.listdir(source_path)
             logging.debug(f"SourceScreen: Files in {source_path}: {files}")
             files_found = False
-            icon_path = os.path.join("/home/admin/kiosk/gui/icons", ICON_FILES["play"])
             for file_name in files:
                 if any(file_name.endswith(ext) for ext in video_extensions):
                     item = QListWidgetItem(file_name)
                     if file_name == self.playing_file and self.parent.interface.source_states.get(self.source_name, False):
+                        icon_path = os.path.join("/home/admin/kiosk/gui/icons", ICON_FILES["play"])
                         if os.path.exists(icon_path):
                             item.setIcon(QIcon(icon_path))
                             item.setSizeHint(QSize(0, FILE_LIST_ITEM_HEIGHT))
