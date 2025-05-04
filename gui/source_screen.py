@@ -24,13 +24,14 @@
 # - Updated ICON_DIR to /home/admin/kiosk/gui/icons.
 # - Scaled Play/Pause icons to 24x24px, adjusted disabled USB text to #A0A0A0.
 # - Doubled Play/Pause icon size to 48x48px.
+# - Added play icon (16x16px) inline with playing file in file listbox.
 #
 # Dependencies:
 # - PyQt5: GUI framework.
 # - source_screen_ui.py: UI setup.
 # - utilities.py.
 
-from PyQt5.QtWidgets import QWidget
+from PyQt5.QtWidgets import QWidget, QListWidgetItem
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QSize
 import logging
@@ -57,6 +58,7 @@ class SourceScreen:
         self.play_button = None  # Set in setup_ui
         self.stop_button = None  # Set in setup_ui
         self.playback_state_label = None  # Set in setup_ui
+        self.playing_file = None  # Track currently playing file
         # Initialize USB/Internal state
         self.usb_path = None
         usb_base = "/media/admin/"
@@ -103,6 +105,7 @@ class SourceScreen:
             }}
         """)
         self.playback_state_label.update()
+        self.update_file_list()  # Refresh file list to show/hide play icon
 
     def on_play_clicked(self):
         from config import LOCAL_FILES_INPUT_NUM, HDMI_OUTPUTS, VIDEO_DIR
@@ -121,6 +124,7 @@ class SourceScreen:
                         hdmi_map[hdmi_idx].append(output_idx)
             logging.debug(f"SourceScreen: Playback HDMI map: {hdmi_map}")
             file_path = os.path.join(self.source_paths[self.current_source], self.file_list.currentItem().text())
+            self.playing_file = self.file_list.currentItem().text()  # Track playing file
             # Pass file path and hdmi_map to toggle_play_pause
             self.parent.playback.toggle_play_pause(self.source_name, file_path, hdmi_map)
             self.update_playback_state()
@@ -130,6 +134,7 @@ class SourceScreen:
     def on_stop_clicked(self):
         logging.debug("SourceScreen: Stop button clicked")
         self.parent.interface.source_states[self.source_name] = False
+        self.playing_file = None  # Clear playing file
         self.parent.playback.stop_input(2)
         self.update_playback_state()
 
@@ -178,6 +183,7 @@ class SourceScreen:
         from config import OUTPUT_BUTTON_COLORS, BORDER_RADIUS, BUTTON_PADDING
         if checked:
             self.current_source = source_name
+            self.playing_file = None  # Clear playing file on source change
             for name, button in self.source_buttons.items():
                 button.setChecked(name == source_name)
                 self.update_source_button_style(name, name == source_name)
@@ -218,9 +224,18 @@ class SourceScreen:
             files = os.listdir(source_path)
             logging.debug(f"SourceScreen: Files in {source_path}: {files}")
             files_found = False
+            icon_path = os.path.join("/home/admin/kiosk/gui/icons", ICON_FILES["play"])
             for file_name in files:
                 if any(file_name.endswith(ext) for ext in video_extensions):
-                    self.file_list.addItem(file_name)
+                    item = QListWidgetItem(file_name)
+                    if file_name == self.playing_file and self.parent.interface.source_states.get(self.source_name, False):
+                        if os.path.exists(icon_path):
+                            item.setIcon(QIcon(icon_path))
+                            item.setSizeHint(QSize(0, FILE_LIST_ITEM_HEIGHT))
+                            logging.debug(f"SourceScreen: Added play icon for playing file: {file_name}")
+                        else:
+                            logging.warning(f"SourceScreen: Play icon not found: {icon_path}")
+                    self.file_list.addItem(item)
                     logging.debug(f"SourceScreen: Added file to list: {file_name}")
                     files_found = True
             if not files_found:

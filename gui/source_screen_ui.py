@@ -33,6 +33,7 @@
 # - Scaled Play/Stop icons to 24x24px, then doubled to 48x48px.
 # - Aligned file listbox top with TV buttons, repositioned USB/Internal buttons equidistant between file listbox and Schedule.
 # - Corrected file listbox top alignment to match Fellowship 1/2 buttons, adjusted USB/Internal buttons downward with OUTPUT_LAYOUT_SPACING.
+# - Moved Schedule button next to Back button, moved Playback State label to bottom-left.
 #
 # Dependencies:
 # - config.py: Filepaths, TV outputs, UI constants.
@@ -187,8 +188,15 @@ def setup_ui(self):
     
     main_layout.addLayout(top_layout)
     
-    # Bottom layout: Schedule button (left), Playback state (center), Back button (right)
+    # Bottom layout: Playback state (left), Schedule and Back (right)
     bottom_layout = QHBoxLayout()
+    self.playback_state_label = QLabel("Playback: Stopped")
+    self.playback_state_label.setFont(QFont(*WIDGET_FONT))
+    self.playback_state_label.setStyleSheet(f"color: {PLAYBACK_STATUS_COLORS['stopped']};")
+    bottom_layout.addWidget(self.playback_state_label)
+    
+    bottom_layout.addStretch()
+    
     schedule_button = QPushButton("Schedule...")
     schedule_button.setFont(QFont(*WIDGET_FONT))
     schedule_button.setFixedSize(*SCHEDULE_BUTTON_SIZE)
@@ -202,11 +210,6 @@ def setup_ui(self):
     """)
     schedule_button.clicked.connect(lambda: open_schedule_dialog(self))
     bottom_layout.addWidget(schedule_button)
-    
-    self.playback_state_label = QLabel("Playback: Stopped")
-    self.playback_state_label.setFont(QFont(*WIDGET_FONT))
-    self.playback_state_label.setStyleSheet(f"color: {PLAYBACK_STATUS_COLORS['stopped']};")
-    bottom_layout.addWidget(self.playback_state_label)
     
     back_button = QPushButton("Back")
     back_button.setFont(QFont(*WIDGET_FONT))
