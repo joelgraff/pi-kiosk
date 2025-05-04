@@ -30,7 +30,8 @@
 #   moved Schedule to bottom-left and Back to bottom-right, set Back width to TV buttons.
 # - Fixed TV output buttons disappearing due to layout typo, added gray text for disabled USB button.
 # - Removed update_file_list call to fix AttributeError, updated ICON_DIR to /home/admin/kiosk/gui/icons.
-# - Scaled Play/Stop icons to 24x24px.
+# - Scaled Play/Stop icons to 24x24px, then doubled to 48x48px.
+# - Aligned file listbox top with TV buttons, repositioned USB/Internal buttons equidistant between file listbox and Schedule.
 #
 # Dependencies:
 # - config.py: Filepaths, TV outputs, UI constants.
@@ -69,6 +70,9 @@ def setup_ui(self):
     title.setStyleSheet(f"color: {TEXT_COLOR}; background: transparent;")
     left_layout.addWidget(title)
     
+    # Spacer to align file list with TV buttons (below Play/Stop)
+    left_layout.addSpacing(SCHEDULE_BUTTON_SIZE[1] + BUTTONS_LAYOUT_SPACING)
+    
     self.file_list = QListWidget()
     self.file_list.setFont(QFont(*WIDGET_FONT))
     self.file_list.setFixedHeight(FILE_LIST_HEIGHT - 50)  # Reduced to avoid overlap
@@ -84,6 +88,9 @@ def setup_ui(self):
     self.file_list.itemClicked.connect(lambda item: file_selected(self, item))
     left_layout.addWidget(self.file_list)
     
+    # Spacer to position USB/Internal buttons equidistant
+    left_layout.addSpacing(66)  # Approx half of ~132px gap
+    
     # USB/Internal toggles
     source_layout = QHBoxLayout()
     source_layout.setSpacing(BUTTONS_LAYOUT_SPACING)
@@ -98,6 +105,10 @@ def setup_ui(self):
         button.clicked.connect(lambda checked, n=name: self.toggle_source(n, checked))
         source_layout.addWidget(button)
     left_layout.addLayout(source_layout)
+    
+    # Spacer to complete equidistant positioning
+    left_layout.addSpacing(66)  # Approx half of ~132px gap
+    
     left_layout.addStretch()
     
     top_layout.addLayout(left_layout, 1)
@@ -121,7 +132,7 @@ def setup_ui(self):
         icon_path = os.path.join("/home/admin/kiosk/gui/icons", icon)  # Updated ICON_DIR
         if os.path.exists(icon_path):
             button.setIcon(QIcon(icon_path))
-            button.setIconSize(QSize(24, 24))  # Scale to 24x24px
+            button.setIconSize(QSize(48, 48))  # Scale to 48x48px
             logging.debug(f"SourceScreen: Loaded custom icon for {action}: {icon_path}")
         else:
             button.setIcon(self.widget.style().standardIcon(qt_icon))

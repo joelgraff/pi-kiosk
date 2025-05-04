@@ -23,6 +23,7 @@
 # - Moved update_file_list call to setup_ui to fix AttributeError.
 # - Updated ICON_DIR to /home/admin/kiosk/gui/icons.
 # - Scaled Play/Pause icons to 24x24px, adjusted disabled USB text to #A0A0A0.
+# - Doubled Play/Pause icon size to 48x48px.
 #
 # Dependencies:
 # - PyQt5: GUI framework.
@@ -88,7 +89,7 @@ class SourceScreen:
         qt_icon = QStyle.SP_MediaPause if is_playing else QStyle.SP_MediaPlay
         if os.path.exists(icon_path):
             self.play_button.setIcon(QIcon(icon_path))
-            self.play_button.setIconSize(QSize(24, 24))  # Scale to 24x24px
+            self.play_button.setIconSize(QSize(48, 48))  # Scale to 48x48px
             logging.debug(f"SourceScreen: Updated play button with custom icon: {icon_path}")
         else:
             self.play_button.setIcon(self.widget.style().standardIcon(qt_icon))
