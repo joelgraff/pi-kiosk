@@ -22,6 +22,7 @@
 # - Added gray text (#808080) for disabled USB button when no USB stick is inserted.
 # - Moved update_file_list call to setup_ui to fix AttributeError.
 # - Updated ICON_DIR to /home/admin/kiosk/gui/icons.
+# - Scaled Play/Pause icons to 24x24px, adjusted disabled USB text to #A0A0A0.
 #
 # Dependencies:
 # - PyQt5: GUI framework.
@@ -75,7 +76,7 @@ class SourceScreen:
             raise
 
     def update_playback_state(self):
-        from config import ICON_DIR, ICON_FILES, PLAYBACK_STATUS_COLORS, PLAY_BUTTON_COLOR, TEXT_COLOR, ICON_SIZE, BORDER_RADIUS, BUTTON_PADDING
+        from config import ICON_FILES, PLAYBACK_STATUS_COLORS, PLAY_BUTTON_COLOR, TEXT_COLOR, BORDER_RADIUS, BUTTON_PADDING
         from PyQt5.QtWidgets import QStyle
         logging.debug(f"SourceScreen: Updating playback state for {self.source_name}")
         is_playing = self.parent.interface.source_states.get(self.source_name, False)
@@ -87,7 +88,7 @@ class SourceScreen:
         qt_icon = QStyle.SP_MediaPause if is_playing else QStyle.SP_MediaPlay
         if os.path.exists(icon_path):
             self.play_button.setIcon(QIcon(icon_path))
-            self.play_button.setIconSize(QSize(*ICON_SIZE))
+            self.play_button.setIconSize(QSize(24, 24))  # Scale to 24x24px
             logging.debug(f"SourceScreen: Updated play button with custom icon: {icon_path}")
         else:
             self.play_button.setIcon(self.widget.style().standardIcon(qt_icon))
@@ -98,7 +99,6 @@ class SourceScreen:
                 color: {TEXT_COLOR};
                 border-radius: {BORDER_RADIUS}px;
                 padding: {BUTTON_PADDING['play_stop']}px;
-                icon-size: {ICON_SIZE[0]}px;
             }}
         """)
         self.playback_state_label.update()
@@ -190,7 +190,7 @@ class SourceScreen:
         from config import OUTPUT_BUTTON_COLORS, BORDER_RADIUS, BUTTON_PADDING
         button = self.source_buttons[name]
         color = OUTPUT_BUTTON_COLORS["selected"] if is_selected else OUTPUT_BUTTON_COLORS["unselected"]
-        text_color = "white" if button.isEnabled() else "#808080"  # Gray for disabled
+        text_color = "white" if button.isEnabled() else "#A0A0A0"  # Lighter gray for disabled
         button.setStyleSheet(f"""
             QPushButton {{
                 background: {color};
