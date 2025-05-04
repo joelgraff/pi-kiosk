@@ -12,6 +12,9 @@
 
 import os
 
+# Qt Platform
+QT_PLATFORM = "xcb"  # X11 platform for Raspberry Pi 5
+
 # Filepaths
 PROJECT_ROOT = "/home/admin/kiosk"
 VIDEO_DIR = "/home/admin/videos"
