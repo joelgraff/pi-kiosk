@@ -28,6 +28,7 @@
 #   aligned file list top with TV buttons.
 # - Changed Schedule button background to gray, moved file listbox to top of VBoxLayout,
 #   moved Schedule to bottom-left and Back to bottom-right, set Back width to TV buttons.
+# - Fixed TV output buttons disappearing due to layout typo, added gray text for disabled USB button.
 #
 # Dependencies:
 # - config.py: Filepaths, TV outputs, UI constants.
@@ -167,7 +168,7 @@ def setup_ui(self):
             outputs_right_layout.addWidget(button)
     
     outputs_container.addLayout(outputs_left_layout)
-    outputs_right_layout.addLayout(outputs_container)
+    outputs_container.addLayout(outputs_right_layout)
     right_layout.addLayout(outputs_container)
     right_layout.addStretch()
     
