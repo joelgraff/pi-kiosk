@@ -65,6 +65,12 @@ OUTPUT_BUTTON_SIZE = (245, 184)
 SCHEDULE_BUTTON_SIZE = (245, 92)
 FILE_LIST_ITEM_HEIGHT = 48
 PIN = "1234"  # Default PIN for auth_dialog
+MAIN_WINDOW_GRADIENT = """
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 #0078D7, stop:1 #003087
+    );
+"""  # Blue gradient for main window
 
 # Colors
 TILE_COLOR = "#0078D7"
