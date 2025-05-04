@@ -28,6 +28,7 @@
 # - Fixed NameError in update_file_list by importing ICON_FILES.
 # - Fixed NameError in update_file_list by importing FILE_LIST_ITEM_HEIGHT.
 # - Added sync status logging for network share.
+# - Moved network share sync to QThread, added "Syncing..." in file listbox during sync.
 #
 # Dependencies:
 # - PyQt5: GUI framework.
@@ -36,7 +37,7 @@
 
 from PyQt5.QtWidgets import QWidget, QListWidgetItem
 from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal
 import logging
 import os
 import sys
@@ -49,6 +50,49 @@ except ImportError as e:
     logging.error(f"SourceScreen: sys.path: {sys.path}")
     logging.error(f"SourceScreen: sys.modules: {list(sys.modules.keys())}")
     raise
+
+class SyncWorker(QObject):
+    finished = pyqtSignal(bool, str)  # Success, error message (if any)
+
+    def __init__(self, share_path, local_path, parent):
+        super().__init__()
+        self.share_path = share_path
+        self.local_path = local_path
+        self.parent = parent
+
+    def run(self):
+        logging.debug("SyncWorker: Starting network share sync")
+        if not os.path.exists(self.share_path):
+            self.finished.emit(False, f"Network share not mounted: {self.share_path}")
+            return
+        if not os.access(self.share_path, os.R_OK):
+            self.finished.emit(False, f"No read permission for network share: {self.share_path}")
+            return
+        share_files = set()
+        try:
+            share_files = set(os.listdir(self.share_path))
+            logging.debug(f"SyncWorker: Network share files: {share_files}")
+        except Exception as e:
+            self.finished.emit(False, f"Failed to list network share files: {e}")
+            return
+        local_files = set()
+        try:
+            local_files = set(os.listdir(self.local_path))
+            logging.debug(f"SyncWorker: Local video files: {local_files}")
+        except Exception as e:
+            self.finished.emit(False, f"Failed to list local video files: {e}")
+            return
+        if share_files and not share_files.issubset(local_files):
+            logging.info(f"SyncWorker: Network share files not synced: {share_files - local_files}")
+            try:
+                self.parent.sync_network_share.run_sync()
+                logging.debug("SyncWorker: Completed network share sync")
+                self.finished.emit(True, "")
+            except AttributeError as e:
+                self.finished.emit(False, f"Failed to trigger sync: {e}")
+        else:
+            logging.debug("SyncWorker: Network share appears synced")
+            self.finished.emit(True, "")
 
 class SourceScreen:
     def __init__(self, parent, source_name):
@@ -83,36 +127,28 @@ class SourceScreen:
             raise
 
     def check_sync_status(self):
-        logging.debug("SourceScreen: Checking network share sync status")
+        logging.debug("SourceScreen: Initiating network share sync check")
+        self.file_list.clear()
+        self.file_list.addItem("Syncing...")
         share_path = "/mnt/share"  # Assumed network share path
         local_path = "/home/admin/videos"
-        if not os.path.exists(share_path):
-            logging.warning(f"SourceScreen: Network share not mounted: {share_path}")
-            return
-        if not os.access(share_path, os.R_OK):
-            logging.warning(f"SourceScreen: No read permission for network share: {share_path}")
-            return
-        share_files = set()
-        try:
-            share_files = set(os.listdir(share_path))
-            logging.debug(f"SourceScreen: Network share files: {share_files}")
-        except Exception as e:
-            logging.error(f"SourceScreen: Failed to list network share files: {e}")
-        local_files = set()
-        try:
-            local_files = set(os.listdir(local_path))
-            logging.debug(f"SourceScreen: Local video files: {local_files}")
-        except Exception as e:
-            logging.error(f"SourceScreen: Failed to list local video files: {e}")
-        if share_files and not share_files.issubset(local_files):
-            logging.info(f"SourceScreen: Network share files not synced: {share_files - local_files}")
-            try:
-                self.parent.sync_network_share.run_sync()  # Attempt sync
-                logging.debug("SourceScreen: Triggered network share sync")
-            except AttributeError as e:
-                logging.error(f"SourceScreen: Failed to trigger sync: {e}")
-        else:
-            logging.debug("SourceScreen: Network share appears synced")
+        self.sync_thread = QThread()
+        self.sync_worker = SyncWorker(share_path, local_path, self.parent)
+        self.sync_worker.moveToThread(self.sync_thread)
+        self.sync_thread.started.connect(self.sync_worker.run)
+        self.sync_worker.finished.connect(self.on_sync_finished)
+        self.sync_worker.finished.connect(self.sync_thread.quit)
+        self.sync_worker.finished.connect(self.sync_worker.deleteLater)
+        self.sync_thread.finished.connect(self.sync_thread.deleteLater)
+        self.sync_thread.start()
+
+    def on_sync_finished(self, success, error_message):
+        logging.debug(f"SourceScreen: Sync finished, success={success}, error={error_message}")
+        if not success:
+            self.file_list.clear()
+            self.file_list.addItem("Sync failed")
+            logging.error(f"SourceScreen: Sync error: {error_message}")
+        self.update_file_list()
 
     def update_playback_state(self):
         from config import ICON_FILES, PLAYBACK_STATUS_COLORS, PLAY_BUTTON_COLOR, TEXT_COLOR, BORDER_RADIUS, BUTTON_PADDING
