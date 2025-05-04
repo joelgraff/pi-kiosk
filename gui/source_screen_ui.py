@@ -24,6 +24,8 @@
 # - Moved Schedule to bottom-right, positioned Playback between Schedule/Back, matched Back/Schedule heights,
 #   reduced Play/Stop height, widened Play/Stop to match TV buttons, added USB/Internal toggles.
 # - Moved update_file_list, toggle_source, update_source_button_style to source_screen.py to fix AttributeError.
+# - Styled USB/Internal buttons to match TV buttons, increased Back button font, reduced file list height,
+#   aligned file list top with TV buttons.
 #
 # Dependencies:
 # - config.py: Filepaths, TV outputs, UI constants.
@@ -62,9 +64,12 @@ def setup_ui(self):
     title.setStyleSheet(f"color: {TEXT_COLOR}; background: transparent;")
     left_layout.addWidget(title)
     
+    # Spacer to align file list with TV buttons (below Play/Stop)
+    left_layout.addSpacing(SCHEDULE_BUTTON_SIZE[1] + BUTTONS_LAYOUT_SPACING)
+    
     self.file_list = QListWidget()
     self.file_list.setFont(QFont(*WIDGET_FONT))
-    self.file_list.setFixedHeight(FILE_LIST_HEIGHT)
+    self.file_list.setFixedHeight(FILE_LIST_HEIGHT - 50)  # Reduced to avoid overlap
     self.file_list.setStyleSheet(f"""
         QListWidget {{
             color: {TEXT_COLOR};
@@ -87,6 +92,7 @@ def setup_ui(self):
         button.setCheckable(True)
         button.setChecked(name == self.current_source)
         button.setEnabled(name != "USB" or self.usb_path is not None)
+        self.update_source_button_style(name, name == self.current_source)
         button.clicked.connect(lambda checked, n=name: self.toggle_source(n, checked))
         source_layout.addWidget(button)
     left_layout.addLayout(source_layout)
@@ -173,7 +179,7 @@ def setup_ui(self):
     # Bottom layout: Back button (left), Playback state (center), Schedule button (right)
     bottom_layout = QHBoxLayout()
     back_button = QPushButton("Back")
-    back_button.setFont(QFont(*BACK_BUTTON_FONT))
+    back_button.setFont(QFont(*WIDGET_FONT))  # Match other buttons
     back_button.setFixedSize(BACK_BUTTON_SIZE[0], SCHEDULE_BUTTON_SIZE[1])  # Match Schedule height
     back_button.setStyleSheet(f"""
         QPushButton {{
@@ -208,6 +214,8 @@ def setup_ui(self):
     main_layout.addLayout(bottom_layout)
     
     self.widget.setStyleSheet(f"QWidget {{ background: {SOURCE_SCREEN_BACKGROUND}; }}")
+    # Populate file list after UI setup
+    self.update_file_list()
     logging.debug("SourceScreen: UI setup completed")
 
 def file_selected(self, item):
