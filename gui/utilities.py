@@ -25,12 +25,6 @@
 # - Used by kiosk.py, source_screen.py, and other components for scheduling and file operations.
 # - list_files and save_schedule added for SourceScreen/OutputDialog compatibility.
 #
-# Recent Changes (as of May 2025):
-# - Added list_files and save_schedule to resolve ImportError in source_screen.py.
-# - Fixed NameError for schedule import.
-# - Added stub_matrix_route for playback routing simulation.
-# - Made SyncNetworkShare thread-safe with progress signals.
-#
 # Known Considerations:
 # - Network share sync (~45 seconds for large files) is acceptable due to SD card writes.
 # - stub_matrix_route is a placeholder; replace with hardware routing if needed.
@@ -111,36 +105,45 @@ class SyncNetworkShare(QObject):
         try:
             source_dir = "/mnt/share"
             dest_dir = "/home/admin/videos"
+            logging.debug(f"SyncNetworkShare: Checking source directory: {source_dir}")
             if not os.path.exists(source_dir):
-                logging.error(f"Source directory {source_dir} does not exist")
+                logging.error(f"SyncNetworkShare: Source directory {source_dir} does not exist")
                 self.progress.emit("Sync failed: Source not mounted")
                 return
-            
+            if not os.access(source_dir, os.R_OK):
+                logging.error(f"SyncNetworkShare: No read permission for {source_dir}")
+                self.progress.emit("Sync failed: No read permission")
+                return
+            if not os.access(dest_dir, os.W_OK):
+                logging.error(f"SyncNetworkShare: No write permission for {dest_dir}")
+                self.progress.emit("Sync failed: No write permission")
+                return
+            logging.debug(f"SyncNetworkShare: Listing files in {source_dir}")
             files = [f for f in os.listdir(source_dir) if f.endswith((".mp4", ".mkv"))]
             total = len(files)
             if total == 0:
-                logging.info("No files to sync")
+                logging.info("SyncNetworkShare: No files to sync")
                 self.progress.emit("No files to sync")
                 return
-            
+            logging.debug(f"SyncNetworkShare: Files to sync: {files}")
             for i, file in enumerate(files):
                 src_path = os.path.join(source_dir, file)
                 dst_path = os.path.join(dest_dir, file)
                 try:
+                    logging.debug(f"SyncNetworkShare: Copying {src_path} to {dst_path}")
                     shutil.copy2(src_path, dst_path)
                     progress = f"Sync progress: {(i + 1) / total * 100:.0f}%"
                     logging.debug(progress)
                     self.progress.emit(progress)
                     time.sleep(0.1)
                 except Exception as e:
-                    logging.error(f"Failed to sync {file}: {e}")
+                    logging.error(f"SyncNetworkShare: Failed to sync {file}: {e}")
                     self.progress.emit(f"Failed to sync {file}")
-            
-            logging.info("Sync completed")
+            logging.info("SyncNetworkShare: Sync completed")
             self.progress.emit("Sync completed")
         except Exception as e:
-            logging.error(f"Sync failed: {e}")
-            self.progress.emit("Sync failed")
+            logging.error(f"SyncNetworkShare: Sync failed: {e}")
+            self.progress.emit(f"Sync failed: {e}")
 
 def stub_matrix_route(input_num, outputs):
     try:

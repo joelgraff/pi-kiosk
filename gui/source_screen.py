@@ -65,10 +65,12 @@ class SyncWorker(QObject):
         if share_files and not share_files.issubset(local_files):
             logging.info(f"SyncWorker: Network share files not synced: {share_files - local_files}")
             try:
-                self.parent.sync_manager.sync()  # Corrected to use sync_manager and sync
+                logging.debug("SyncWorker: Initiating sync via sync_manager")
+                self.parent.sync_manager.sync()
                 logging.debug("SyncWorker: Completed network share sync")
                 self.finished.emit(True, "")
-            except AttributeError as e:
+            except Exception as e:
+                logging.error(f"SyncWorker: Sync failed: {e}")
                 self.finished.emit(False, f"Failed to trigger sync: {e}")
         else:
             logging.debug("SyncWorker: Network share appears synced")
