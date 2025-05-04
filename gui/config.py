@@ -16,6 +16,8 @@ import os
 PROJECT_ROOT = "/home/admin/kiosk"
 VIDEO_DIR = "/home/admin/videos"
 LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
+LOG_FILE = os.path.join(LOG_DIR, "kiosk.log")  # Main application log file
+MPV_LOG_FILE = os.path.join(LOG_DIR, "mpv.log")  # mpv log file
 SCHEDULE_FILE = os.path.join(PROJECT_ROOT, "schedule.json")
 ICON_DIR = os.path.join(PROJECT_ROOT, "icons")
 

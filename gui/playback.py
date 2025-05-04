@@ -20,6 +20,7 @@ import logging
 import subprocess
 import os
 from utilities import stub_matrix_route
+from config import MPV_LOG_FILE
 
 class Playback:
     def __init__(self):
@@ -42,7 +43,7 @@ class Playback:
                 logging.error(f"Playback: Failed to route input {input_num} to outputs {output_indices}")
                 return
         mpv_args.append(file_path)
-        log_file = open("/home/admin/kiosk/logs/mpv.log", "a")
+        log_file = open(MPV_LOG_FILE, "a")
         try:
             process = subprocess.Popen(
                 mpv_args,
