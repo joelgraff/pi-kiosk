@@ -10,26 +10,6 @@
 # - Icons: /home/admin/kiosk/gui/icons (128x128px).
 # - Videos: /home/admin/videos (Internal), /media/admin/<drive> (USB).
 #
-# Recent Changes (as of May 2025):
-# - Added import os for QT_SCALE_FACTOR logging.
-# - Moved setup_ui import to top for early error detection.
-# - Enhanced import logging to debug circular imports.
-# - Added event handlers (update_playback_state, on_play_clicked, on_stop_clicked,
-#   toggle_output, update_output_button_style) to fix AttributeError.
-# - Added MPV --fs-screen=n logic for multi-screen playback.
-# - Added update_file_list, toggle_source, update_source_button_style for USB/Internal toggles.
-# - Refined toggle_source and update_source_button_style for consistent styling and always-selected state.
-# - Added gray text (#808080) for disabled USB button when no USB stick is inserted.
-# - Moved update_file_list call to setup_ui to fix AttributeError.
-# - Updated ICON_DIR to /home/admin/kiosk/gui/icons.
-# - Scaled Play/Pause icons to 24x24px, adjusted disabled USB text to #A0A0A0.
-# - Doubled Play/Pause icon size to 48x48px.
-# - Added play icon (16x16px) inline with playing file in file listbox.
-# - Fixed NameError in update_file_list by importing ICON_FILES.
-# - Fixed NameError in update_file_list by importing FILE_LIST_ITEM_HEIGHT.
-# - Added sync status logging for network share.
-# - Moved network share sync to QThread, added "Syncing..." in file listbox during sync.
-#
 # Dependencies:
 # - PyQt5: GUI framework.
 # - source_screen_ui.py: UI setup.
@@ -85,7 +65,7 @@ class SyncWorker(QObject):
         if share_files and not share_files.issubset(local_files):
             logging.info(f"SyncWorker: Network share files not synced: {share_files - local_files}")
             try:
-                self.parent.sync_network_share.run_sync()
+                self.parent.sync_manager.sync()  # Corrected to use sync_manager and sync
                 logging.debug("SyncWorker: Completed network share sync")
                 self.finished.emit(True, "")
             except AttributeError as e:
