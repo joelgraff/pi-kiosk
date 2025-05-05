@@ -37,7 +37,7 @@ except ImportError as e:
 class KioskGUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        logging.debug("KioskGUI: Initializing")
+        logging.debug(f"KioskGUI: Initializing with inputs: {list(INPUTS.keys())}")
         self.interface = None
         self.playback = None
         self.sync_manager = None
@@ -124,8 +124,13 @@ class KioskGUI(QMainWindow):
 
     def show_source_screen(self, source_name):
         logging.debug(f"KioskGUI: Showing source screen: {source_name}")
-        if hasattr(self.interface, 'source_screens') and source_name in self.interface.source_screens:
+        if not hasattr(self.interface, 'source_screens'):
+            logging.error("KioskGUI: Interface has no source_screens attribute")
+            return
+        logging.debug(f"KioskGUI: Available source screens: {list(self.interface.source_screens.keys())}")
+        if source_name in self.interface.source_screens:
             self.setCentralWidget(self.interface.source_screens[source_name].widget)
+            logging.debug(f"KioskGUI: Set central widget to {source_name} SourceScreen")
         else:
             logging.error(f"KioskGUI: Source screen not found: {source_name}")
 

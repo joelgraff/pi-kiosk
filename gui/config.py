@@ -28,14 +28,14 @@ ICON_DIR = os.path.join(PROJECT_ROOT, "icons")
 TV_OUTPUTS = {
     "Fellowship 1": 0,
     "Fellowship 2": 1,
-    "Fellowship 3": 2,
+    "Nursery": 2,
+    "Sanctuary": 3
 }
 
 # HDMI Outputs (key: HDMI port index, value: list of TV output indices)
 HDMI_OUTPUTS = {
-    0: [0],  # HDMI-A-1: Fellowship 1
-    1: [1],  # HDMI-A-2: Fellowship 2
-    2: [2],  # HDMI-A-3: Fellowship 3
+    0: [0, 2],  # HDMI-A-1: Fellowship 1, Nursery
+    1: [1, 3]   # HDMI-A-2: Fellowship 2, Sanctuary
 }
 
 # Input Sources (key: name, value: input number for matrix routing)
@@ -43,7 +43,7 @@ INPUTS = {
     "Local Files": 2,
     "Audio": 3,
     "DVD": 4,
-    "Web": 5,
+    "Web": 5
 }
 
 # Dynamic Input Number Generator for Multiple Files
@@ -80,7 +80,7 @@ TILE_TEXT_COLOR = "white"
 OUTPUT_BUTTON_COLORS = {
     "selected": "#0078D7",  # Blue for current input
     "other": "#D83B01",     # Red for other inputs
-    "unselected": "#808080" # Gray for unassigned
+    "unassigned": "#808080" # Gray for unassigned
 }
 PLAY_BUTTON_COLOR = "#0078D7"
 STOP_BUTTON_COLOR = "#D83B01"

@@ -3,12 +3,12 @@
 # Overview:
 # This file defines the Interface class, responsible for the main interface screen of the
 # media kiosk application on a Raspberry Pi 5 with X11. The interface displays tile buttons
-# (~245x190px) for media sources (e.g., Local Files, Audio, DVD, Web) and a Stop All button.
+# (~245x190px) for media sources (defined in config.INPUTS) and a Stop All button.
 # Clicking a source navigates to its SourceScreen (via kiosk.py's show_source_screen).
 #
 # Key Functionality:
-# - Creates a QGridLayout with source buttons and a Stop All button.
-# - Handles button clicks to navigate to SourceScreen (e.g., Local Files).
+# - Creates a QGridLayout with source buttons (from config.INPUTS) and a Stop All button.
+# - Handles button clicks to navigate to SourceScreen.
 # - Updates sync status for Local Files (connected to SyncNetworkShare signals).
 # - Maintains source_states to track playback status.
 #
@@ -18,32 +18,36 @@
 # - Icons: /home/admin/kiosk/icons (64x64px: audio.png, local_files.png, etc.).
 # - Called by: kiosk.py (initializes Interface).
 #
-# Recent Fixes (as of April 2025):
+# Recent Fixes (as of May 2025):
 # - Fixed AttributeError: 'KioskGUI' object has no attribute 'show_source_screen' by adding show_source_screen to KioskGUI in kiosk.py.
 # - Fixed circular import issue by delaying stop_all_button connection to connect_stop_all.
+# - Fixed "Source screen not found" error by initializing source_screens with SourceScreen instances using config.INPUTS.
 #
 # Known Considerations:
 # - Ensure icon files exist in /home/admin/kiosk/icons to avoid warnings.
 # - Button sizes (~245x190px) and layout may need adjustment for touchscreen usability.
 # - Sync status updates rely on SyncNetworkShare signals (utilities.py).
+# - Dynamic button layout assumes 4 inputs; adjust grid for more/fewer inputs.
 #
 # Dependencies:
 # - PyQt5: GUI framework.
-# - Files: kiosk.py (parent), source_screen.py (navigation target).
+# - Files: kiosk.py (parent), source_screen.py (navigation target), config.py (INPUTS).
 
 from PyQt5.QtWidgets import QWidget, QGridLayout, QPushButton
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon, QFont
 import logging
 import os
+from source_screen import SourceScreen
+from config import INPUTS, ICON_FILES
 
 class Interface:
     def __init__(self, parent):
         # Initialize Interface with KioskGUI parent
         self.parent = parent
         self.main_widget = QWidget()
-        self.source_states = {"Local Files": False, "Audio": False, "DVD": False, "Web": False}
-        self.source_screens = {}  # To be populated with SourceScreen instances
+        self.source_states = {source: False for source in INPUTS}  # Track playback status
+        self.source_screens = {source: SourceScreen(self.parent, source) for source in INPUTS}  # Initialize SourceScreen instances
         self.stop_all_button = None  # Store stop_all_button for later connection
         self.setup_ui()
         logging.debug("Interface: Initialized")
@@ -52,13 +56,18 @@ class Interface:
         # Sets up the main interface with source buttons and Stop All
         logging.debug("Interface: Setting up UI")
         layout = QGridLayout(self.main_widget)
-        sources = ["Local Files", "Audio", "DVD", "Web"]
+        sources = list(INPUTS.keys())  # Use config.INPUTS for source names
+        # Define grid positions for up to 4 buttons (2x2); adjust for more sources if needed
         positions = [(0, 0), (0, 1), (1, 0), (1, 1)]
 
-        for source, pos in zip(sources, positions):
+        for idx, (source, pos) in enumerate(zip(sources, positions)):
+            if idx >= 4:  # Limit to 4 buttons for 2x2 grid; adjust layout if more sources
+                logging.warning(f"Interface: Skipping source {source}; only 4 buttons supported in 2x2 grid")
+                break
             button = QPushButton(source)
             button.setFont(QFont("Arial", 16))
-            icon_path = f"/home/admin/kiosk/icons/{source.lower().replace(' ', '_')}.png"
+            icon_key = source.lower().replace(' ', '_')
+            icon_path = os.path.join("/home/admin/kiosk/icons", ICON_FILES.get(icon_key, ""))
             if os.path.exists(icon_path):
                 button.setIcon(QIcon(icon_path))
                 button.setIconSize(Qt.Size(64, 64))
@@ -79,8 +88,9 @@ class Interface:
 
         self.stop_all_button = QPushButton("Stop All")
         self.stop_all_button.setFont(QFont("Arial", 16))
-        if os.path.exists("/home/admin/kiosk/icons/stop_all.png"):
-            self.stop_all_button.setIcon(QIcon("/home/admin/kiosk/icons/stop_all.png"))
+        icon_path = os.path.join("/home/admin/kiosk/icons", ICON_FILES.get("stop_all", ""))
+        if os.path.exists(icon_path):
+            self.stop_all_button.setIcon(QIcon(icon_path))
             self.stop_all_button.setIconSize(Qt.Size(64, 64))
         self.stop_all_button.setStyleSheet("""
             QPushButton {
