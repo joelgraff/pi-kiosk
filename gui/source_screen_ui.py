@@ -4,6 +4,41 @@
 # Defines the setup_ui function for the Local Files screen.
 # Sets up file list, USB/Internal toggles, TV output toggles, Play/Stop/Schedule buttons, Back button, and playback state label.
 #
+# Recent Changes (as of May 2025):
+# - Fixed 'setAlignment' error on Back button using QHBoxLayout.
+# - Extracted hardcoded values to config.py.
+# - Updated filepaths to use /home/admin/kiosk/ project root (except VIDEO_DIR).
+# - Fixed QFont error by using QFont.Bold in TITLE_FONT.
+# - Added file listing for videos directory.
+# - Added Back button connection to show_controls.
+# - Improved file listing with directory checks and case-insensitive extensions.
+# - Disabled Play/Stop buttons until file selected.
+# - Moved ScheduleDialog import inside open_schedule_dialog to avoid circular imports.
+# - Moved event handlers to source_screen.py to fix AttributeError.
+# - Added placeholder QMessageBox and enhanced logging for Schedule dialog.
+# - Moved placeholder to except blocks and added window flags logging.
+# - Added dialog.show(), raise_(), activateWindow(), and centered geometry.
+# - Removed test dialog, DebugScheduleDialog, and excessive logging.
+# - Removed "TV" label, changed "Local Files" to "Select File", moved Back button to bottom-left,
+#   eliminated Sync notification, moved Play/Stop to top-right, moved Schedule below TV outputs.
+# - Moved Schedule to bottom-right, positioned Playback between Schedule/Back, matched Back/Schedule heights,
+#   reduced Play/Stop height, widened Play/Stop to match TV buttons, added USB/Internal toggles.
+# - Moved update_file_list, toggle_source, update_source_button_style to source_screen.py to fix AttributeError.
+# - Styled USB/Internal buttons to match TV buttons, increased Back button font, reduced file list height,
+#   aligned file list top with TV buttons.
+# - Changed Schedule button background to gray, moved file listbox to top of VBoxLayout,
+#   moved Schedule to bottom-left and Back to bottom-right, set Back width to TV buttons.
+# - Fixed TV output buttons disappearing due to layout typo, added gray text for disabled USB button.
+# - Removed update_file_list call to fix AttributeError, updated ICON_DIR to /home/admin/kiosk/gui/icons.
+# - Scaled Play/Stop icons to 24x24px, then doubled to 48x48px.
+# - Aligned file listbox top with TV buttons, repositioned USB/Internal buttons equidistant between file listbox and Schedule.
+# - Corrected file listbox top alignment to match Fellowship 1/2 buttons, adjusted USB/Internal buttons downward with OUTPUT_LAYOUT_SPACING.
+# - Moved Schedule button next to Back button, moved Playback State label to bottom-left.
+# - Prevented selecting error messages in file listbox.
+#
+# Dependencies:
+# - config.py: Filepaths, TV outputs, UI constants.
+
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QListWidget, QLabel, QPushButton, QStyle, QMessageBox
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont, QIcon
@@ -26,7 +61,7 @@ def setup_ui(self):
     main_layout.setContentsMargins(MAIN_LAYOUT_SPACING, MAIN_LAYOUT_SPACING, MAIN_LAYOUT_SPACING, MAIN_LAYOUT_SPACING)
     main_layout.setSpacing(MAIN_LAYOUT_SPACING)
     
-    # Top layout: File list and outputs/playback state (1/2 vs. 1/2)
+    # Top layout: File list and outputs (1/2 vs. 1/2)
     top_layout = QHBoxLayout()
     top_layout.setSpacing(TOP_LAYOUT_SPACING)
     
@@ -61,7 +96,7 @@ def setup_ui(self):
     # USB/Internal toggles
     source_layout = QHBoxLayout()
     source_layout.setSpacing(BUTTONS_LAYOUT_SPACING)
-    self.source_buttons = {"USB": QPushButton(""), "Internal": QPushButton("")}  # Removed text
+    self.source_buttons = {"USB": QPushButton(""), "Internal": QPushButton("")}  # No text
     for name, button in self.source_buttons.items():
         button.setFont(QFont(*WIDGET_FONT))
         button.setFixedSize(OUTPUT_BUTTON_SIZE[0], SCHEDULE_BUTTON_SIZE[1])
@@ -69,7 +104,16 @@ def setup_ui(self):
         button.setChecked(name == self.current_source)
         button.setEnabled(name != "USB" or self.usb_path is not None)
         self.update_source_button_style(name, name == self.current_source)
-        button.setIcon(self.widget.style().standardIcon(QStyle.SP_DriveHDIcon))  # Same icon for USB and Internal
+        if name == "USB":
+            icon_path = os.path.join(ICON_DIR, "usb.png")  # Custom USB icon
+            if os.path.exists(icon_path):
+                button.setIcon(QIcon(icon_path))
+                logging.debug(f"SourceScreen: Loaded custom USB icon: {icon_path}")
+            else:
+                button.setIcon(self.widget.style().standardIcon(QStyle.SP_DriveHDIcon))  # Fallback
+                logging.warning(f"SourceScreen: Custom USB icon not found: {icon_path}")
+        else:
+            button.setIcon(self.widget.style().standardIcon(QStyle.SP_DriveHDIcon))  # Internal storage
         button.setIconSize(QSize(48, 48))  # Match Play/Stop icon size
         button.clicked.connect(lambda checked, n=name: self.toggle_source(n, checked))
         source_layout.addWidget(button)
@@ -80,20 +124,20 @@ def setup_ui(self):
     
     top_layout.addLayout(left_layout, 1)
     
-    # Right side: Playback state label and TV outputs
+    # Right side: Select Output label and TV outputs
     right_layout = QVBoxLayout()
     
-    # Spacer to align TV buttons with file listbox (title: ~28px + spacing: 5px)
-    right_layout.addSpacing(33)  # Aligns TV buttons with file listbox top
+    # Spacer to align TV buttons with file listbox (adjusted for Select Output label)
+    right_layout.addSpacing(5)  # Reduced from 33px, as label (~28px) compensates
     
-    # Playback state label (top-right)
-    playback_layout = QHBoxLayout()
-    self.playback_state_label = QLabel("Playback: Stopped")
-    self.playback_state_label.setFont(QFont(*WIDGET_FONT))
-    self.playback_state_label.setStyleSheet(f"color: {PLAYBACK_STATUS_COLORS['stopped']}; background: transparent;")
-    playback_layout.addStretch()  # Align label to the right
-    playback_layout.addWidget(self.playback_state_label)
-    right_layout.addLayout(playback_layout)
+    # Select Output label (aligned left over TV output buttons)
+    output_label_layout = QHBoxLayout()
+    output_label = QLabel("Select Output")
+    output_label.setFont(QFont(*TITLE_FONT))
+    output_label.setStyleSheet(f"color: {TEXT_COLOR}; background: transparent;")
+    output_label_layout.addWidget(output_label)
+    output_label_layout.addStretch()  # Align left
+    right_layout.addLayout(output_label_layout)
     
     # TV Outputs: Two columns (Fellowship 1/Nursery, Fellowship 2/Sanctuary)
     outputs_container = QHBoxLayout()
@@ -128,24 +172,33 @@ def setup_ui(self):
     
     main_layout.addLayout(top_layout)
     
-    # Bottom layout: Back button (left), Play/Stop buttons (right)
+    # Bottom layout: Back button (left), Playback state (right), Play/Stop buttons (right)
     bottom_layout = QHBoxLayout()
     
-    back_button = QPushButton("")  # Removed text
+    back_button = QPushButton("")  # No text
     back_button.setFont(QFont(*WIDGET_FONT))
     back_button.setFixedSize(OUTPUT_BUTTON_SIZE[0], SCHEDULE_BUTTON_SIZE[1])  # Match TV width, Schedule height
     back_button.setIcon(self.widget.style().standardIcon(QStyle.SP_ArrowBack))  # Back arrow Qt icon
     back_button.setIconSize(QSize(48, 48))  # Match other button icons
     back_button.setStyleSheet(f"""
         QPushButton {{
-            background: {BACK_BUTTON_COLOR};
-            color: #d3d3d3;  # Lighter gray for icon
+            background: {OUTPUT_BUTTON_COLORS['unselected']};  # Match USB/Internal/TV buttons
+            color: white;  # Match other buttons' icon/text color
             border-radius: {BORDER_RADIUS}px;
             padding: {BUTTON_PADDING['back']}px;
         }}
     """)
     back_button.clicked.connect(self.parent.show_controls)
     bottom_layout.addWidget(back_button)  # Aligned left
+    
+    # Playback state label (right, above Play/Stop)
+    playback_layout = QHBoxLayout()
+    self.playback_state_label = QLabel("Playback: Stopped")
+    self.playback_state_label.setFont(QFont(*WIDGET_FONT))
+    self.playback_state_label.setStyleSheet(f"color: {PLAYBACK_STATUS_COLORS['stopped']}; background: transparent;")
+    playback_layout.addStretch()  # Align right
+    playback_layout.addWidget(self.playback_state_label)
+    bottom_layout.addLayout(playback_layout)
     
     bottom_layout.addStretch()  # Push Play/Stop to the right
     
