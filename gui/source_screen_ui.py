@@ -61,7 +61,7 @@ def setup_ui(self):
     # USB/Internal toggles
     source_layout = QHBoxLayout()
     source_layout.setSpacing(BUTTONS_LAYOUT_SPACING)
-    self.source_buttons = {"USB": QPushButton("USB"), "Internal": QPushButton("Internal")}
+    self.source_buttons = {"USB": QPushButton(""), "Internal": QPushButton("")}  # Removed text
     for name, button in self.source_buttons.items():
         button.setFont(QFont(*WIDGET_FONT))
         button.setFixedSize(OUTPUT_BUTTON_SIZE[0], SCHEDULE_BUTTON_SIZE[1])
@@ -69,9 +69,8 @@ def setup_ui(self):
         button.setChecked(name == self.current_source)
         button.setEnabled(name != "USB" or self.usb_path is not None)
         self.update_source_button_style(name, name == self.current_source)
-        if name == "USB":
-            button.setIcon(self.widget.style().standardIcon(QStyle.SP_DriveHDIcon))  # USB-specific Qt icon
-            button.setIconSize(QSize(48, 48))  # Match Play/Stop icon size
+        button.setIcon(self.widget.style().standardIcon(QStyle.SP_DriveHDIcon))  # Same icon for USB and Internal
+        button.setIconSize(QSize(48, 48))  # Match Play/Stop icon size
         button.clicked.connect(lambda checked, n=name: self.toggle_source(n, checked))
         source_layout.addWidget(button)
     left_layout.addLayout(source_layout)
@@ -84,7 +83,10 @@ def setup_ui(self):
     # Right side: Playback state label and TV outputs
     right_layout = QVBoxLayout()
     
-    # Playback state label (moved to top-right)
+    # Spacer to align TV buttons with file listbox (title: ~28px + spacing: 5px)
+    right_layout.addSpacing(33)  # Aligns TV buttons with file listbox top
+    
+    # Playback state label (top-right)
     playback_layout = QHBoxLayout()
     self.playback_state_label = QLabel("Playback: Stopped")
     self.playback_state_label.setFont(QFont(*WIDGET_FONT))
@@ -129,7 +131,7 @@ def setup_ui(self):
     # Bottom layout: Back button (left), Play/Stop buttons (right)
     bottom_layout = QHBoxLayout()
     
-    back_button = QPushButton("Back")
+    back_button = QPushButton("")  # Removed text
     back_button.setFont(QFont(*WIDGET_FONT))
     back_button.setFixedSize(OUTPUT_BUTTON_SIZE[0], SCHEDULE_BUTTON_SIZE[1])  # Match TV width, Schedule height
     back_button.setIcon(self.widget.style().standardIcon(QStyle.SP_ArrowBack))  # Back arrow Qt icon
@@ -137,7 +139,7 @@ def setup_ui(self):
     back_button.setStyleSheet(f"""
         QPushButton {{
             background: {BACK_BUTTON_COLOR};
-            color: {TEXT_COLOR};
+            color: #d3d3d3;  # Lighter gray for icon
             border-radius: {BORDER_RADIUS}px;
             padding: {BUTTON_PADDING['back']}px;
         }}
@@ -147,7 +149,7 @@ def setup_ui(self):
     
     bottom_layout.addStretch()  # Push Play/Stop to the right
     
-    # Play/Stop buttons (moved to bottom-right)
+    # Play/Stop buttons (bottom-right)
     self.play_button = None
     self.stop_button = None
     new_play_stop_size = (OUTPUT_BUTTON_SIZE[0], SCHEDULE_BUTTON_SIZE[1])  # Match TV width, Schedule height
