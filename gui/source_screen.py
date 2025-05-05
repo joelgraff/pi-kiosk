@@ -7,10 +7,10 @@
 # Environment:
 # - Raspberry Pi 5, X11 (QT_QPA_PLATFORM=xcb), PyQt5, 787x492px window.
 # - Logs: /home/admin/kiosk/logs/kiosk.log.
-# - Icons: /home/admin/kiosk/icons (128x128px).
+# - Icons: /home/admin/kiosk/gui/icons (128x128px).
 # - Videos: /home/admin/videos (Internal), /media/admin/<drive> (USB).
 #
-# Recent Changes (as of June 2025):
+# Recent Changes (as of May 2025):
 # - Added import os for QT_SCALE_FACTOR logging.
 # - Moved setup_ui import to top for early error detection.
 # - Enhanced import logging to debug circular imports.
@@ -21,7 +21,7 @@
 # - Refined toggle_source and update_source_button_style for consistent styling and always-selected state.
 # - Added gray text (#808080) for disabled USB button when no USB stick is inserted.
 # - Moved update_file_list call to setup_ui to fix AttributeError.
-# - Updated ICON_DIR to /home/admin/kiosk/icons.
+# - Updated ICON_DIR to /home/admin/kiosk/gui/icons.
 # - Scaled Play/Pause icons to 24x24px, adjusted disabled USB text to #A0A0A0.
 # - Doubled Play/Pause icon size to 48x48px.
 # - Added play icon (16x16px) inline with playing file in file listbox.
@@ -159,11 +159,11 @@ class SourceScreen:
         self.playback_state_label.setText(f"Playback: {state}")
         self.playback_state_label.setStyleSheet(f"color: {PLAYBACK_STATUS_COLORS[state.lower()]}; background: transparent;")
         icon_file = ICON_FILES["pause"] if is_playing else ICON_FILES["play"]
-        icon_path = os.path.join("/home/admin/kiosk/icons", icon_file)
+        icon_path = os.path.join("/home/admin/kiosk/gui/icons", icon_file)  # Updated ICON_DIR
         qt_icon = QStyle.SP_MediaPause if is_playing else QStyle.SP_MediaPlay
         if os.path.exists(icon_path):
             self.play_button.setIcon(QIcon(icon_path))
-            self.play_button.setIconSize(QSize(48, 48))
+            self.play_button.setIconSize(QSize(48, 48))  # Scale to 48x48px
             logging.debug(f"SourceScreen: Updated play button with custom icon: {icon_path}")
         else:
             self.play_button.setIcon(self.widget.style().standardIcon(qt_icon))
@@ -301,7 +301,7 @@ class SourceScreen:
                 if any(file_name.endswith(ext) for ext in video_extensions):
                     item = QListWidgetItem(file_name)
                     if file_name == self.playing_file and self.parent.interface.source_states.get(self.source_name, False):
-                        icon_path = os.path.join("/home/admin/kiosk/icons", ICON_FILES["play"])
+                        icon_path = os.path.join("/home/admin/kiosk/gui/icons", ICON_FILES["play"])
                         if os.path.exists(icon_path):
                             item.setIcon(QIcon(icon_path))
                             item.setSizeHint(QSize(0, FILE_LIST_ITEM_HEIGHT))
@@ -317,9 +317,3 @@ class SourceScreen:
         except Exception as e:
             logging.error(f"SourceScreen: Failed to list files in {source_path}: {e}")
             self.file_list.addItem("Error loading files")
-
-    def update_sync_status(self, status):
-        if self.source_name == "Local Files":
-            logging.debug(f"SourceScreen: Local Files sync status updated: {status}")
-            self.playback_state_label.setText(f"Network Sync: {status}")
-            self.playback_state_label.update()

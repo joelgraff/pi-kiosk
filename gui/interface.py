@@ -1,118 +1,109 @@
-# config.py: Centralized configuration for the media kiosk project
+# interface.py: Main interface screen for the media kiosk
 #
 # Overview:
-# Defines hardcoded values that may need to be changed, such as filepaths, TV outputs,
-# input sources, and UI constants. Used by kiosk.py, source_screen.py, and related files.
+# This file defines the Interface class, responsible for the main interface screen of the
+# media kiosk application on a Raspberry Pi 5 with X11. The interface displays tile buttons
+# (~245x190px) for media sources (e.g., Local Files, Audio, DVD, Web) and a Stop All button.
+# Clicking a source navigates to its SourceScreen (via kiosk.py's show_source_screen).
 #
-# Categories:
-# - Filepaths: Directories and files for logs, videos, icons, etc.
-# - TV Outputs: Names and mappings for TV outputs.
-# - Inputs: Source names, input numbers, and types.
-# - UI: Window sizes, colors, fonts, button sizes, spacing, etc.
-# - Other: PIN, input numbers, etc.
+# Key Functionality:
+# - Creates a QGridLayout with source buttons and a Stop All button.
+# - Handles button clicks to navigate to SourceScreen (e.g., Local Files).
+# - Updates sync status for Local Files (connected to SyncNetworkShare signals).
+# - Maintains source_states to track playback status.
 #
-# Recent Changes (as of June 2025):
-# - Updated filepaths to use /home/admin/kiosk/ as project root for most files.
-# - Fixed TITLE_font to use QFont.Bold instead of string "Bold".
-# - Updated VIDEO_DIR to /home/admin/videos (outside project root).
-# - Added HDMI_OUTPUTS to map TV outputs to HDMI ports.
-# - Aligned TV_OUTPUTS indices with output_dialog.py (1-based) and updated HDMI_OUTPUTS.
+# Environment:
+# - Raspberry Pi 5, X11 (QT_QPA_PLATFORM=xcb), PyQt5, 787x492px main window.
+# - Logs: /home/admin/gui/logs/kiosk.log (app logs, including navigation).
+# - Icons: /home/admin/gui/icons (64x64px: audio.png, local_files.png, etc.).
+# - Called by: kiosk.py (initializes Interface).
+#
+# Recent Fixes (as of April 2025):
+# - Fixed AttributeError: 'KioskGUI' object has no attribute 'show_source_screen' (line 49)
+#   by adding show_source_screen to KioskGUI in kiosk.py.
+#
+# Known Considerations:
+# - Ensure icon files exist in /home/admin/gui/icons to avoid warnings.
+# - Button sizes (~245x190px) and layout may need adjustment for touchscreen usability.
+# - Sync status updates rely on SyncNetworkShare signals (utilities.py).
+# - Placeholder code assumed for tile button setup; verify actual implementation.
+#
+# Dependencies:
+# - PyQt5: GUI framework.
+# - Files: kiosk.py (parent), source_screen.py (navigation target).
 
-from PyQt5.QtGui import QFont
+from PyQt5.QtWidgets import QWidget, QGridLayout, QPushButton
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIcon, QFont
+import logging
+import os
 
-# Filepaths
-PROJECT_ROOT = "/home/admin/kiosk"
-LOG_DIR = f"{PROJECT_ROOT}/logs"
-LOG_FILE = f"{LOG_DIR}/kiosk.log"
-VIDEO_DIR = "/home/admin/videos"  # Videos are under user root
-ICON_DIR = f"{PROJECT_ROOT}/icons"
-SCHEDULE_FILE = f"{PROJECT_ROOT}/schedule.json"
-NETWORK_SHARE_DIR = "/mnt/share"  # External mount
-USB_STORAGE_DIR = "/mnt/usb"      # External mount
-ICON_FILES = {
-    "play": "play.png",
-    "stop": "stop.png",
-    "pause": "pause.png",
-    "local_files": "local_files.png",
-    "audio": "audio.png",
-    "dvd": "dvd.png",
-    "web": "web.png",
-    "stop_all": "stop_all.png",
-    "back": "back.png"
-}
+class Interface:
+    def __init__(self, parent):
+        # Initialize Interface with KioskGUI parent
+        self.parent = parent
+        self.main_widget = QWidget()
+        self.source_states = {"Local Files": False, "Audio": False, "DVD": False, "Web": False}
+        self.setup_ui()
+        logging.debug("Interface: Initialized")
 
-# TV Outputs (1-based indices to match output_dialog.py)
-TV_OUTPUTS = {
-    "Fellowship 1": 1,
-    "Fellowship 2": 2,
-    "Nursery": 3,
-    "Sanctuary": 4
-}
-TOTAL_TV_OUTPUTS = len(TV_OUTPUTS)
+    def setup_ui(self):
+        # Sets up the main interface with source buttons and Stop All
+        logging.debug("Interface: Setting up UI")
+        layout = QGridLayout(self.main_widget)
+        sources = ["Local Files", "Audio", "DVD", "Web"]
+        positions = [(0, 0), (0, 1), (1, 0), (1, 1)]
 
-# HDMI Output Mappings
-HDMI_OUTPUTS = {
-    0: [1, 4],  # HDMI 0: Fellowship 1 (1), Sanctuary (4)
-    1: [2, 3]   # HDMI 1: Fellowship 2 (2), Nursery (3)
-}
+        for source, pos in zip(sources, positions):
+            button = QPushButton(source)
+            button.setFont(QFont("Arial", 16))
+            icon_path = f"/home/admin/gui/icons/{source.lower().replace(' ', '_')}.png"
+            if os.path.exists(icon_path):
+                button.setIcon(QIcon(icon_path))
+                button.setIconSize(Qt.Size(64, 64))
+            button.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #2980b9, stop:1 #3498db);
+                    color: white;
+                    border-radius: 6px;
+                    padding: 10px;
+                }
+                QPushButton:hover {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #6ab7f5, stop:1 #ffffff);
+                }
+            """)
+            button.setFixedSize(245, 190)
+            button.clicked.connect(lambda checked, s=source: self.source_clicked(s))
+            layout.addWidget(button, *pos)
 
-# Inputs
-INPUTS = {
-    "Local Files": {"input_num": 2, "type": "video"},
-    "Audio": {"input_num": 1, "type": "audio"},
-    "DVD": {"input_num": 3, "type": "dvd"},
-    "Web": {"input_num": 4, "type": "web"}
-}
-TOTAL_INPUTS = len(INPUTS)
+        stop_all_button = QPushButton("Stop All")
+        stop_all_button.setFont(QFont("Arial", 16))
+        if os.path.exists("/home/admin/gui/icons/stop_all.png"):
+            stop_all_button.setIcon(QIcon("/home/admin/gui/icons/stop_all.png"))
+            stop_all_button.setIconSize(Qt.Size(64, 64))
+        stop_all_button.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #c0392b, stop:1 #e74c3c);
+                color: white;
+                border-radius: 6px;
+                padding: 10px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #6ab7f5, stop:1 #ffffff);
+            }
+        """)
+        stop_all_button.clicked.connect(self.parent.playback.stop_all_playback)
+        layout.addWidget(stop_all_button, 2, 0, 1, 2, Qt.AlignCenter)
+        logging.debug("Interface: UI setup completed")
 
-# UI Constants
-WINDOW_SIZE = (787, 492)  # Main window (width, height)
-AUTH_DIALOG_SIZE = (245, 184)
-QT_PLATFORM = "xcb"
-MAIN_WINDOW_GRADIENT = ("#2c3e50", "#34495e")  # Start, end colors
-LABEL_COLOR = "white"
-SOURCE_SCREEN_BACKGROUND = "#2a3b5e"
+    def source_clicked(self, source_name):
+        # Handles source button clicks, navigating to SourceScreen
+        logging.debug(f"Interface: Source clicked: {source_name}")
+        self.parent.selected_source = source_name
+        self.parent.show_source_screen(source_name)  # Line 49: Calls KioskGUI.show_source_screen
 
-# Fonts
-TITLE_FONT = ("Arial", 28, QFont.Bold)
-WIDGET_FONT = ("Arial", 20)
-BACK_BUTTON_FONT = ("Arial", 16)
-
-# Colors
-SCHEDULE_BUTTON_COLOR = "#4caf50"  # Green
-PLAY_BUTTON_COLOR = "#4caf50"  # Green
-STOP_BUTTON_COLOR = "#e53935"  # Red
-SYNC_STATUS_COLOR = "#ffc107"  # Yellow
-PLAYBACK_STATUS_COLORS = {"playing": "#4caf50", "stopped": "#e53935"}  # Green, red
-OUTPUT_BUTTON_COLORS = {
-    "selected": "#1f618d",  # Blue
-    "other": "#c0392b",     # Red
-    "unselected": "#7f8c8d" # Gray
-}
-BACK_BUTTON_COLOR = "#7f8c8d"  # Gray
-TEXT_COLOR = "#ffffff"  # White
-FILE_LIST_BORDER_COLOR = "#ffffff"  # White
-
-# Sizes
-FILE_LIST_HEIGHT = 260  # px
-FILE_LIST_ITEM_HEIGHT = 60  # px
-SCHEDULE_BUTTON_SIZE = (180, 60)  # width, height
-OUTPUT_BUTTON_SIZE = (180, 60)
-PLAY_STOP_BUTTON_SIZE = (120, 120)
-BACK_BUTTON_SIZE = (80, 40)
-ICON_SIZE = (112, 112)
-
-# Spacing and Padding
-MAIN_LAYOUT_SPACING = 20  # px
-TOP_LAYOUT_SPACING = 20
-OUTPUTS_CONTAINER_SPACING = 10
-OUTPUT_LAYOUT_SPACING = 5
-BUTTONS_LAYOUT_SPACING = 15
-RIGHT_LAYOUT_SPACING = 20
-BUTTON_PADDING = {"schedule_output": 10, "back": 5, "play_stop": 2}
-FILE_LIST_PADDING = 5
-BORDER_RADIUS = 8  # px
-
-# Other
-PIN = "1234"  # Hardcoded PIN (bypassed)
-LOCAL_FILES_INPUT_NUM = 2
+    def update_sync_status(self, status):
+        # Updates sync status display (connected to SyncNetworkShare signals)
+        logging.debug(f"Interface: Updating sync status: {status}")
+        # Placeholder: Add sync status label or indicator if needed
+        pass

@@ -10,7 +10,6 @@
 # - Temporarily disabled authentication to bypass PIN prompt.
 # - Added missing import os.
 # - Extracted hardcoded values to config.py.
-# - Fixed "Source screen not found" by using Interface.source_screens.
 #
 # Dependencies:
 # - PyQt5: GUI framework.
@@ -67,7 +66,7 @@ signal.signal(signal.SIGTERM, signal_handler)
 class KioskGUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        logging.debug(f"KioskGUI: Initializing with inputs: {list(INPUTS.keys())}")
+        logging.debug("Initializing KioskGUI")
         try:
             self.setWindowTitle("Media Kiosk")
             self.setFixedSize(*WINDOW_SIZE)
@@ -82,6 +81,7 @@ class KioskGUI(QMainWindow):
             """)
             self.stack = QStackedWidget()
             self.setCentralWidget(self.stack)
+            self.source_screens = []
 
             self.input_map = {name: info["input_num"] for name, info in INPUTS.items()}
             self.input_paths = {}
@@ -97,10 +97,10 @@ class KioskGUI(QMainWindow):
             logging.debug("Initializing Interface")
             self.interface = Interface(self)
             self.stack.addWidget(self.interface.main_widget)
-            self.interface.connect_stop_all()  # Connect stop_all_button after playback
 
             self.sync_manager = SyncNetworkShare()
             self.sync_manager.progress.connect(self.interface.update_sync_status)
+            self.sync_manager.progress.connect(self.update_source_sync_status)
 
             logging.debug("Starting scheduler thread")
             self.scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
@@ -115,6 +115,14 @@ class KioskGUI(QMainWindow):
     def show_controls(self):
         try:
             logging.debug("Showing controls")
+            for widget in self.source_screens:
+                try:
+                    widget.disconnect()
+                except Exception:
+                    pass
+                self.stack.removeWidget(widget)
+                widget.deleteLater()
+            self.source_screens.clear()
             self.interface.main_widget.setVisible(True)
             self.interface.main_widget.show()
             self.stack.setCurrentWidget(self.interface.main_widget)
@@ -128,21 +136,15 @@ class KioskGUI(QMainWindow):
 
     def show_source_screen(self, source_name):
         try:
-            logging.debug(f"KioskGUI: Showing source screen: {source_name}")
-            if not hasattr(self.interface, 'source_screens'):
-                logging.error("KioskGUI: Interface has no source_screens attribute")
-                return
-            logging.debug(f"KioskGUI: Available source screens: {list(self.interface.source_screens.keys())}")
-            if source_name in self.interface.source_screens:
-                source_screen = self.interface.source_screens[source_name]
-                if source_screen.widget not in [self.stack.widget(i) for i in range(self.stack.count())]:
-                    self.stack.addWidget(source_screen.widget)
-                self.stack.setCurrentWidget(source_screen.widget)
-                logging.debug(f"KioskGUI: Displayed source screen for {source_name}")
-            else:
-                logging.error(f"KioskGUI: Source screen not found: {source_name}")
+            from source_screen import SourceScreen
+            source_screen = SourceScreen(self, source_name)
+            self.source_screens.append(source_screen.widget)
+            self.stack.addWidget(source_screen.widget)
+            self.stack.setCurrentWidget(source_screen.widget)
+            logging.debug(f"Displayed source screen for {source_name}")
         except Exception as e:
-            logging.error(f"KioskGUI: Failed to show source screen for {source_name}: {e}")
+            logging.error(f"Failed to show source screen for {source_name}: {e}")
+            sys.exit(1)
 
     def update_source_sync_status(self, status):
         try:
@@ -150,7 +152,7 @@ class KioskGUI(QMainWindow):
             if hasattr(current_widget, 'source_screen') and current_widget.source_screen.source_name == "Local Files":
                 current_widget.source_screen.update_sync_status(status)
         except Exception as e:
-            logging.error(f"KioskGUI: Failed to update source sync status: {e}")
+            logging.error(f"Failed to update source sync status: {e}")
 
     def load_and_apply_schedule(self):
         try:
@@ -163,9 +165,9 @@ class KioskGUI(QMainWindow):
                         outputs=task["outputs"],
                         path=task.get("path")
                     )
-            logging.debug("KioskGUI: Schedule loaded and applied")
+            logging.debug("Schedule loaded and applied")
         except Exception as e:
-            logging.error(f"KioskGUI: Failed to load schedule: {e}")
+            logging.error(f"Failed to load schedule: {e}")
 
 if __name__ == '__main__':
     try:

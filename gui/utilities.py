@@ -17,19 +17,25 @@
 #
 # Environment:
 # - Raspberry Pi 5, X11 (QT_QPA_PLATFORM=xcb), PyQt5, 787x492px main window.
-# - Logs: /home/admin/kiosk/logs/kiosk.log (app logs, including sync progress).
+# - Logs: /home/admin/gui/logs/kiosk.log (app logs, including sync progress).
 # - Videos: /home/admin/videos (local), /mnt/share (network share).
-# - Schedule file: /home/admin/kiosk/schedule.json.
+# - Schedule file: /home/admin/gui/schedule.json.
 #
 # Integration Notes:
 # - Used by kiosk.py, source_screen.py, and other components for scheduling and file operations.
 # - list_files and save_schedule added for SourceScreen/OutputDialog compatibility.
 #
+# Recent Changes (as of May 2025):
+# - Added list_files and save_schedule to resolve ImportError in source_screen.py.
+# - Fixed NameError for schedule import.
+# - Added stub_matrix_route for playback routing simulation.
+# - Made SyncNetworkShare thread-safe with progress signals.
+#
 # Known Considerations:
 # - Network share sync (~45 seconds for large files) is acceptable due to SD card writes.
 # - stub_matrix_route is a placeholder; replace with hardware routing if needed.
 # - Ensure /mnt/share is mounted before sync (sudo mount -t cifs).
-# - Schedule file (/home/admin/kiosk/schedule.json) needs validation.
+# - Schedule file (/home/admin/gui/schedule.json) needs validation.
 #
 # Dependencies:
 # - PyQt5: For Qt signals in SyncNetworkShare.
@@ -47,7 +53,6 @@ import time
 import schedule
 import threading
 from PyQt5.QtCore import QObject, pyqtSignal
-logging.debug("utilities: Starting module initialization")
 
 def signal_handler(sig, frame):
     logging.info(f"Received signal {sig}, shutting down")
@@ -63,7 +68,7 @@ def run_scheduler():
             logging.error(f"Scheduler error: {e}")
 
 def load_schedule():
-    schedule_file = "/home/admin/kiosk/schedule.json"
+    schedule_file = "/home/admin/gui/schedule.json"
     try:
         if os.path.exists(schedule_file):
             with open(schedule_file, "r") as f:
@@ -74,7 +79,7 @@ def load_schedule():
         return []
 
 def save_schedule(schedule_data):
-    schedule_file = "/home/admin/kiosk/schedule.json"
+    schedule_file = "/home/admin/gui/schedule.json"
     try:
         os.makedirs(os.path.dirname(schedule_file), exist_ok=True)
         with open(schedule_file, "w") as f:
@@ -106,45 +111,36 @@ class SyncNetworkShare(QObject):
         try:
             source_dir = "/mnt/share"
             dest_dir = "/home/admin/videos"
-            logging.debug(f"SyncNetworkShare: Checking source directory: {source_dir}")
             if not os.path.exists(source_dir):
-                logging.error(f"SyncNetworkShare: Source directory {source_dir} does not exist")
+                logging.error(f"Source directory {source_dir} does not exist")
                 self.progress.emit("Sync failed: Source not mounted")
                 return
-            if not os.access(source_dir, os.R_OK):
-                logging.error(f"SyncNetworkShare: No read permission for {source_dir}")
-                self.progress.emit("Sync failed: No read permission")
-                return
-            if not os.access(dest_dir, os.W_OK):
-                logging.error(f"SyncNetworkShare: No write permission for {dest_dir}")
-                self.progress.emit("Sync failed: No write permission")
-                return
-            logging.debug(f"SyncNetworkShare: Listing files in {source_dir}")
+            
             files = [f for f in os.listdir(source_dir) if f.endswith((".mp4", ".mkv"))]
             total = len(files)
             if total == 0:
-                logging.info("SyncNetworkShare: No files to sync")
+                logging.info("No files to sync")
                 self.progress.emit("No files to sync")
                 return
-            logging.debug(f"SyncNetworkShare: Files to sync: {files}")
+            
             for i, file in enumerate(files):
                 src_path = os.path.join(source_dir, file)
                 dst_path = os.path.join(dest_dir, file)
                 try:
-                    logging.debug(f"SyncNetworkShare: Copying {src_path} to {dst_path}")
                     shutil.copy2(src_path, dst_path)
                     progress = f"Sync progress: {(i + 1) / total * 100:.0f}%"
                     logging.debug(progress)
                     self.progress.emit(progress)
                     time.sleep(0.1)
                 except Exception as e:
-                    logging.error(f"SyncNetworkShare: Failed to sync {file}: {e}")
+                    logging.error(f"Failed to sync {file}: {e}")
                     self.progress.emit(f"Failed to sync {file}")
-            logging.info("SyncNetworkShare: Sync completed")
+            
+            logging.info("Sync completed")
             self.progress.emit("Sync completed")
         except Exception as e:
-            logging.error(f"SyncNetworkShare: Sync failed: {e}")
-            self.progress.emit(f"Sync failed: {e}")
+            logging.error(f"Sync failed: {e}")
+            self.progress.emit("Sync failed")
 
 def stub_matrix_route(input_num, outputs):
     try:
@@ -153,4 +149,3 @@ def stub_matrix_route(input_num, outputs):
     except Exception as e:
         logging.error(f"Routing failed for input {input_num} to outputs {outputs}: {e}")
         return False
-logging.debug("utilities: Module initialization complete")

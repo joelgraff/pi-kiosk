@@ -13,10 +13,9 @@
 #
 # Recent Changes (as of June 2025):
 # - Updated filepaths to use /home/admin/kiosk/ as project root for most files.
-# - Fixed TITLE_font to use QFont.Bold instead of string "Bold".
+# - Fixed TITLE_FONT to use QFont.Bold instead of string "Bold".
 # - Updated VIDEO_DIR to /home/admin/videos (outside project root).
 # - Added HDMI_OUTPUTS to map TV outputs to HDMI ports.
-# - Aligned TV_OUTPUTS indices with output_dialog.py (1-based) and updated HDMI_OUTPUTS.
 
 from PyQt5.QtGui import QFont
 
@@ -32,16 +31,10 @@ USB_STORAGE_DIR = "/mnt/usb"      # External mount
 ICON_FILES = {
     "play": "play.png",
     "stop": "stop.png",
-    "pause": "pause.png",
-    "local_files": "local_files.png",
-    "audio": "audio.png",
-    "dvd": "dvd.png",
-    "web": "web.png",
-    "stop_all": "stop_all.png",
-    "back": "back.png"
+    "pause": "pause.png"
 }
 
-# TV Outputs (1-based indices to match output_dialog.py)
+# TV Outputs
 TV_OUTPUTS = {
     "Fellowship 1": 1,
     "Fellowship 2": 2,
