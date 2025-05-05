@@ -67,7 +67,7 @@ def setup_ui(self):
     
     # Left side: File list, USB/Internal toggles
     left_layout = QVBoxLayout()
-    title = QLabel("Select File")
+    title = QLabel("File")  # Removed "Select"
     title.setFont(QFont(*TITLE_FONT))
     title.setStyleSheet(f"color: {TEXT_COLOR}; background: transparent;")
     left_layout.addWidget(title)
@@ -85,7 +85,7 @@ def setup_ui(self):
             border: 2px solid {FILE_LIST_BORDER_COLOR};
             border-radius: {BORDER_RADIUS}px;
         }}
-        QListWidget::item {{ height: 30px; padding: 2px; }}  # Reduced by 50% from 60px and 5px
+        QListWidget::item {{ height: 30px; padding: 2px; }}
     """)
     self.file_list.itemClicked.connect(lambda item: file_selected(self, item))
     left_layout.addWidget(self.file_list)
@@ -116,6 +116,16 @@ def setup_ui(self):
             button.setIcon(self.widget.style().standardIcon(QStyle.SP_DriveHDIcon))  # Internal storage
         button.setIconSize(QSize(48, 48))  # Match Play/Stop icon size
         button.clicked.connect(lambda checked, n=name: self.toggle_source(n, checked))
+        stylesheet = f"""
+            QPushButton {{
+                background: {OUTPUT_BUTTON_COLORS['unselected' if not button.isChecked() else 'selected']};
+                color: {'white' if button.isEnabled() else '#A0A0A0'};
+                border-radius: {BORDER_RADIUS}px;
+                padding: {BUTTON_PADDING['schedule_output']}px;
+            }}
+        """
+        button.setStyleSheet(stylesheet)
+        logging.debug(f"SourceScreen: Applied stylesheet to {name} button: {stylesheet}")
         source_layout.addWidget(button)
     left_layout.addLayout(source_layout)
     
@@ -124,15 +134,15 @@ def setup_ui(self):
     
     top_layout.addLayout(left_layout, 1)
     
-    # Right side: Select Output label and TV outputs
+    # Right side: Output label and TV outputs
     right_layout = QVBoxLayout()
     
-    # Spacer to align TV buttons with file listbox (adjusted for Select Output label)
-    right_layout.addSpacing(5)  # Reduced from 33px, as label (~28px) compensates
+    # Spacer to align TV buttons with file listbox (adjusted for Output label)
+    right_layout.addSpacing(5)  # Accounts for Output label (~28px)
     
-    # Select Output label (aligned left over TV output buttons)
+    # Output label (aligned left over TV output buttons)
     output_label_layout = QHBoxLayout()
-    output_label = QLabel("Select Output")
+    output_label = QLabel("Output")  # Removed "Select"
     output_label.setFont(QFont(*TITLE_FONT))
     output_label.setStyleSheet(f"color: {TEXT_COLOR}; background: transparent;")
     output_label_layout.addWidget(output_label)
@@ -158,6 +168,16 @@ def setup_ui(self):
         is_other = any(other_input != 2 and output_idx in self.parent.input_output_map.get(other_input, []) and self.parent.active_inputs.get(other_input, False) for other_input in self.parent.input_output_map)
         self.update_output_button_style(name, is_current, is_other)
         button.clicked.connect(lambda checked, n=name: self.toggle_output(n, checked))
+        stylesheet = f"""
+            QPushButton {{
+                background: {OUTPUT_BUTTON_COLORS['selected' if is_current else 'other' if is_other else 'unselected']};
+                color: white;
+                border-radius: {BORDER_RADIUS}px;
+                padding: {BUTTON_PADDING['schedule_output']}px;
+            }}
+        """
+        button.setStyleSheet(stylesheet)
+        logging.debug(f"SourceScreen: Applied stylesheet to TV output button {name}: {stylesheet}")
         if name in ["Fellowship 1", "Nursery"]:
             outputs_left_layout.addWidget(button)
         else:
@@ -178,16 +198,24 @@ def setup_ui(self):
     back_button = QPushButton("")  # No text
     back_button.setFont(QFont(*WIDGET_FONT))
     back_button.setFixedSize(OUTPUT_BUTTON_SIZE[0], SCHEDULE_BUTTON_SIZE[1])  # Match TV width, Schedule height
-    back_button.setIcon(self.widget.style().standardIcon(QStyle.SP_ArrowBack))  # Back arrow Qt icon
+    icon_path = os.path.join(ICON_DIR, "back.png")  # Custom Back icon
+    if os.path.exists(icon_path):
+        back_button.setIcon(QIcon(icon_path))
+        logging.debug(f"SourceScreen: Loaded custom Back icon: {icon_path}")
+    else:
+        back_button.setIcon(self.widget.style().standardIcon(QStyle.SP_ArrowBack))  # Fallback
+        logging.warning(f"SourceScreen: Custom Back icon not found: {icon_path}")
     back_button.setIconSize(QSize(48, 48))  # Match other button icons
-    back_button.setStyleSheet(f"""
+    stylesheet = f"""
         QPushButton {{
-            background: {OUTPUT_BUTTON_COLORS['unselected']};  # Match USB/Internal/TV buttons
-            color: white;  # Match other buttons' icon/text color
+            background: {OUTPUT_BUTTON_COLORS['unselected']};
+            color: white;
             border-radius: {BORDER_RADIUS}px;
             padding: {BUTTON_PADDING['back']}px;
         }}
-    """)
+    """
+    back_button.setStyleSheet(stylesheet)
+    logging.debug(f"SourceScreen: Applied stylesheet to Back button: {stylesheet}")
     back_button.clicked.connect(self.parent.show_controls)
     bottom_layout.addWidget(back_button)  # Aligned left
     
@@ -199,6 +227,9 @@ def setup_ui(self):
     playback_layout.addStretch()  # Align right
     playback_layout.addWidget(self.playback_state_label)
     bottom_layout.addLayout(playback_layout)
+    
+    # Spacer to separate playback label from Play/Stop buttons
+    bottom_layout.addSpacing(BUTTONS_LAYOUT_SPACING)  # 15px for visual separation
     
     bottom_layout.addStretch()  # Push Play/Stop to the right
     
@@ -216,19 +247,21 @@ def setup_ui(self):
         icon_path = os.path.join("/home/admin/kiosk/gui/icons", icon)
         if os.path.exists(icon_path):
             button.setIcon(QIcon(icon_path))
-            button.setIconSize(QSize(48, 48))  # 48x48px
             logging.debug(f"SourceScreen: Loaded custom icon for {action}: {icon_path}")
         else:
             button.setIcon(self.widget.style().standardIcon(qt_icon))
             logging.warning(f"SourceScreen: Custom icon not found for {action}: {icon_path}")
-        button.setStyleSheet(f"""
+        button.setIconSize(QSize(48, 48))  # 48x48px
+        stylesheet = f"""
             QPushButton {{
                 background: {color};
                 color: {TEXT_COLOR};
                 border-radius: {BORDER_RADIUS}px;
                 padding: {BUTTON_PADDING['play_stop']}px;
             }}
-        """)
+        """
+        button.setStyleSheet(stylesheet)
+        logging.debug(f"SourceScreen: Applied stylesheet to {action} button: {stylesheet}")
         button.setEnabled(False)  # Disable until file selected
         if action == "Play":
             self.play_button = button
