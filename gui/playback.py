@@ -49,7 +49,6 @@ class Playback:
     def __init__(self, parent):
         # Initialize Playback with KioskGUI parent for state access
         self.parent = parent
-        os.makedirs(LOG_DIR, exist_ok=True)
         logging.debug("Initializing Playback")
         self.media_processes = {}  # Store (input_num, hdmi_idx): process
 

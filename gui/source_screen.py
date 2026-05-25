@@ -90,7 +90,7 @@ class SyncWorker(QObject):
                 logging.debug("SyncWorker: Completed network share sync")
                 self.finished.emit(True, "")
             except (AttributeError, TypeError) as e:
-                self.finished.emit(False, f"Failed to trigger sync ({type(e).__name__}): {e}")
+                self.finished.emit(False, f"Failed to trigger sync: {e}")
         else:
             logging.debug("SyncWorker: Network share appears synced")
             self.finished.emit(True, "")
