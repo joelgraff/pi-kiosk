@@ -33,10 +33,11 @@
 # - Files: kiosk.py (parent), source_screen.py (navigation target).
 
 from PyQt5.QtWidgets import QWidget, QGridLayout, QPushButton
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QIcon, QFont
 import logging
 import os
+from config import ICON_DIR
 
 class Interface:
     def __init__(self, parent):
@@ -57,10 +58,10 @@ class Interface:
         for source, pos in zip(sources, positions):
             button = QPushButton(source)
             button.setFont(QFont("Arial", 16))
-            icon_path = f"/home/admin/gui/icons/{source.lower().replace(' ', '_')}.png"
+            icon_path = os.path.join(ICON_DIR, f"{source.lower().replace(' ', '_')}.png")
             if os.path.exists(icon_path):
                 button.setIcon(QIcon(icon_path))
-                button.setIconSize(Qt.Size(64, 64))
+                button.setIconSize(QSize(64, 64))
             button.setStyleSheet("""
                 QPushButton {
                     background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #2980b9, stop:1 #3498db);
@@ -78,9 +79,10 @@ class Interface:
 
         stop_all_button = QPushButton("Stop All")
         stop_all_button.setFont(QFont("Arial", 16))
-        if os.path.exists("/home/admin/gui/icons/stop_all.png"):
-            stop_all_button.setIcon(QIcon("/home/admin/gui/icons/stop_all.png"))
-            stop_all_button.setIconSize(Qt.Size(64, 64))
+        stop_all_icon_path = os.path.join(ICON_DIR, "stop_all.png")
+        if os.path.exists(stop_all_icon_path):
+            stop_all_button.setIcon(QIcon(stop_all_icon_path))
+            stop_all_button.setIconSize(QSize(64, 64))
         stop_all_button.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #c0392b, stop:1 #e74c3c);

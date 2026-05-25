@@ -39,6 +39,7 @@ from PyQt5.QtGui import QFont
 import logging
 import json
 import os
+from config import SCHEDULE_FILE
 
 class ScheduleDialog(QDialog):
     def __init__(self, parent, input_num):
@@ -125,15 +126,15 @@ class ScheduleDialog(QDialog):
                 "repeat": "Daily"
             }
             
-            schedule_file = "/home/admin/gui/schedule.json"
             try:
-                with open(schedule_file, "r") as f:
+                with open(SCHEDULE_FILE, "r") as f:
                     schedule_data = json.load(f)
             except FileNotFoundError:
                 schedule_data = []
             
             schedule_data.append(schedule_entry)
-            with open(schedule_file, "w") as f:
+            os.makedirs(os.path.dirname(SCHEDULE_FILE), exist_ok=True)
+            with open(SCHEDULE_FILE, "w") as f:
                 json.dump(schedule_data, f, indent=4)
             
             logging.debug(f"ScheduleDialog: Saved schedule entry: {schedule_entry}")

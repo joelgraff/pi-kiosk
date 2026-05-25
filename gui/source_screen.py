@@ -41,6 +41,7 @@ from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal, QObject
 import logging
 import os
 import sys
+from config import VIDEO_DIR, NETWORK_SHARE_DIR, ICON_DIR, LOCAL_FILES_INPUT_NUM
 
 try:
     from source_screen_ui import setup_ui
@@ -85,10 +86,10 @@ class SyncWorker(QObject):
         if share_files and not share_files.issubset(local_files):
             logging.info(f"SyncWorker: Network share files not synced: {share_files - local_files}")
             try:
-                self.parent.sync_network_share.run_sync()
+                self.parent.sync_manager.sync()
                 logging.debug("SyncWorker: Completed network share sync")
                 self.finished.emit(True, "")
-            except AttributeError as e:
+            except (AttributeError, TypeError) as e:
                 self.finished.emit(False, f"Failed to trigger sync: {e}")
         else:
             logging.debug("SyncWorker: Network share appears synced")
@@ -112,7 +113,7 @@ class SourceScreen:
         if os.path.exists(usb_base) and os.listdir(usb_base):
             self.usb_path = os.path.join(usb_base, os.listdir(usb_base)[0])
         self.current_source = "Internal" if not self.usb_path else "USB"
-        self.source_paths = {"Internal": "/home/admin/videos", "USB": self.usb_path}
+        self.source_paths = {"Internal": VIDEO_DIR, "USB": self.usb_path}
         self.setup_ui()
         self.check_sync_status()  # Check sync status on init
         logging.debug(f"SourceScreen: Initialized for {self.source_name}")
@@ -130,8 +131,8 @@ class SourceScreen:
         logging.debug("SourceScreen: Initiating network share sync check")
         self.file_list.clear()
         self.file_list.addItem("Syncing...")
-        share_path = "/mnt/share"  # Assumed network share path
-        local_path = "/home/admin/videos"
+        share_path = NETWORK_SHARE_DIR
+        local_path = VIDEO_DIR
         self.sync_thread = QThread()
         self.sync_worker = SyncWorker(share_path, local_path, self.parent)
         self.sync_worker.moveToThread(self.sync_thread)
@@ -159,7 +160,7 @@ class SourceScreen:
         self.playback_state_label.setText(f"Playback: {state}")
         self.playback_state_label.setStyleSheet(f"color: {PLAYBACK_STATUS_COLORS[state.lower()]}; background: transparent;")
         icon_file = ICON_FILES["pause"] if is_playing else ICON_FILES["play"]
-        icon_path = os.path.join("/home/admin/kiosk/gui/icons", icon_file)  # Updated ICON_DIR
+        icon_path = os.path.join(ICON_DIR, icon_file)
         qt_icon = QStyle.SP_MediaPause if is_playing else QStyle.SP_MediaPlay
         if os.path.exists(icon_path):
             self.play_button.setIcon(QIcon(icon_path))
@@ -207,7 +208,7 @@ class SourceScreen:
         logging.debug("SourceScreen: Stop button clicked")
         self.parent.interface.source_states[self.source_name] = False
         self.playing_file = None  # Clear playing file
-        self.parent.playback.stop_input(2)
+        self.parent.playback.stop_input(LOCAL_FILES_INPUT_NUM)
         self.update_playback_state()
 
     def toggle_output(self, tv_name, checked):
@@ -301,7 +302,7 @@ class SourceScreen:
                 if any(file_name.endswith(ext) for ext in video_extensions):
                     item = QListWidgetItem(file_name)
                     if file_name == self.playing_file and self.parent.interface.source_states.get(self.source_name, False):
-                        icon_path = os.path.join("/home/admin/kiosk/gui/icons", ICON_FILES["play"])
+                        icon_path = os.path.join(ICON_DIR, ICON_FILES["play"])
                         if os.path.exists(icon_path):
                             item.setIcon(QIcon(icon_path))
                             item.setSizeHint(QSize(0, FILE_LIST_ITEM_HEIGHT))

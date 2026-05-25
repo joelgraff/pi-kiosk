@@ -53,6 +53,7 @@ import time
 import schedule
 import threading
 from PyQt5.QtCore import QObject, pyqtSignal
+from config import NETWORK_SHARE_DIR, VIDEO_DIR, SCHEDULE_FILE
 
 def signal_handler(sig, frame):
     logging.info(f"Received signal {sig}, shutting down")
@@ -68,10 +69,9 @@ def run_scheduler():
             logging.error(f"Scheduler error: {e}")
 
 def load_schedule():
-    schedule_file = "/home/admin/gui/schedule.json"
     try:
-        if os.path.exists(schedule_file):
-            with open(schedule_file, "r") as f:
+        if os.path.exists(SCHEDULE_FILE):
+            with open(SCHEDULE_FILE, "r") as f:
                 return json.load(f)
         return []
     except Exception as e:
@@ -79,12 +79,11 @@ def load_schedule():
         return []
 
 def save_schedule(schedule_data):
-    schedule_file = "/home/admin/gui/schedule.json"
     try:
-        os.makedirs(os.path.dirname(schedule_file), exist_ok=True)
-        with open(schedule_file, "w") as f:
+        os.makedirs(os.path.dirname(SCHEDULE_FILE), exist_ok=True)
+        with open(SCHEDULE_FILE, "w") as f:
             json.dump(schedule_data, f, indent=4)
-        logging.debug(f"Saved schedule to {schedule_file}")
+        logging.debug(f"Saved schedule to {SCHEDULE_FILE}")
     except Exception as e:
         logging.error(f"Failed to save schedule: {e}")
 
@@ -109,8 +108,8 @@ class SyncNetworkShare(QObject):
 
     def sync(self):
         try:
-            source_dir = "/mnt/share"
-            dest_dir = "/home/admin/videos"
+            source_dir = NETWORK_SHARE_DIR
+            dest_dir = VIDEO_DIR
             if not os.path.exists(source_dir):
                 logging.error(f"Source directory {source_dir} does not exist")
                 self.progress.emit("Sync failed: Source not mounted")

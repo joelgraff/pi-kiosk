@@ -43,11 +43,13 @@ import os
 import subprocess
 import logging
 from utilities import stub_matrix_route
+from config import LOG_DIR
 
 class Playback:
     def __init__(self, parent):
         # Initialize Playback with KioskGUI parent for state access
         self.parent = parent
+        os.makedirs(LOG_DIR, exist_ok=True)
         logging.debug("Initializing Playback")
         self.media_processes = {}  # Store (input_num, hdmi_idx): process
 
@@ -90,7 +92,7 @@ class Playback:
                     "--hwdec=no",
                     f"--fs-screen={hdmi_idx}",
                     path,
-                    "--log-file=/home/admin/kiosk/logs/mpv.log"
+                    f"--log-file={os.path.join(LOG_DIR, 'mpv.log')}"
                 ]
                 logging.debug(f"Executing MPV command: {' '.join(cmd)}")
                 process = subprocess.Popen(
