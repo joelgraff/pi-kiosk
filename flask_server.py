@@ -24,6 +24,8 @@ from config import (
     FLASK_PORT,
 )
 
+YT_DLP_TIMEOUT_SECONDS = 15
+
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = VIDEO_DIR
 
@@ -170,13 +172,19 @@ def stream_url():
     hdmi_map = build_hdmi_map(outputs)
 
     try:
-        stream_url = subprocess.check_output(["yt-dlp", "-g", url]).decode().strip()
+        stream_url = subprocess.check_output(
+            ["yt-dlp", "-g", url],
+            timeout=YT_DLP_TIMEOUT_SECONDS,
+        ).decode().strip()
         play_with_mpv(stream_url, hdmi_map)
         logging.info(f"Started URL stream: url={url}, outputs={outputs}")
         return redirect(url_for('index'))
     except subprocess.CalledProcessError:
         logging.error(f"Failed to resolve stream URL: {url}")
         return 'Failed to stream URL', 500
+    except subprocess.TimeoutExpired:
+        logging.error(f"Timed out resolving stream URL after {YT_DLP_TIMEOUT_SECONDS}s: {url}")
+        return 'Stream resolution timed out', 504
     except Exception as exc:
         logging.error(f"Failed to stream URL: {exc}")
         return 'Failed to stream URL', 500

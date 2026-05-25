@@ -1,5 +1,5 @@
 #!/bin/bash
-set -uo pipefail
+set -euo pipefail
 
 PROJECT_ROOT="/home/admin/kiosk"
 LOG_DIR="$PROJECT_ROOT/logs"
