@@ -114,7 +114,6 @@ class SourceScreen:
             self.usb_path = os.path.join(usb_base, os.listdir(usb_base)[0])
         self.current_source = "Internal" if not self.usb_path else "USB"
         self.source_paths = {"Internal": VIDEO_DIR, "USB": self.usb_path}
-        self.parent.input_output_map.setdefault(LOCAL_FILES_INPUT_NUM, [DEFAULT_OUTPUT_INDEX])
         self.setup_ui()
         self.check_sync_status()  # Check sync status on init
         logging.debug(f"SourceScreen: Initialized for {self.source_name}")
