@@ -37,7 +37,9 @@ from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QPushButton, QLabel
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 import logging
+import re
 from utilities import load_schedule, save_schedule
+from config import TV_OUTPUTS
 
 class ScheduleDialog(QDialog):
     def __init__(self, parent, input_num):
@@ -109,9 +111,32 @@ class ScheduleDialog(QDialog):
     def save_schedule(self):
         # Saves the schedule task to schedule.json
         try:
-            time = self.time_input.text()
-            outputs = [int(o) for o in self.outputs_input.text().split(",") if o.strip()]
-            path = self.path_input.text()
+            time = self.time_input.text().strip()
+            outputs_raw = self.outputs_input.text().strip()
+            path = self.path_input.text().strip()
+
+            if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", time):
+                logging.warning(f"ScheduleDialog: Invalid time format: {time}")
+                return
+
+            allowed_outputs = set(TV_OUTPUTS.values())
+            output_tokens = [token.strip() for token in outputs_raw.split(",") if token.strip()]
+            if not output_tokens:
+                logging.warning("ScheduleDialog: No outputs provided")
+                return
+
+            outputs = []
+            for token in output_tokens:
+                if not token.isdigit():
+                    logging.warning(f"ScheduleDialog: Non-numeric output: {token}")
+                    return
+                output_num = int(token)
+                if output_num not in allowed_outputs:
+                    logging.warning(f"ScheduleDialog: Output out of range: {output_num}")
+                    return
+                if output_num not in outputs:
+                    outputs.append(output_num)
+
             if not time or not outputs or not path:
                 logging.warning("ScheduleDialog: Incomplete input")
                 return

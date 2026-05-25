@@ -184,8 +184,6 @@ class SourceScreen:
         from config import LOCAL_FILES_INPUT_NUM, HDMI_OUTPUTS, VIDEO_DIR
         logging.debug("SourceScreen: Play button clicked")
         if self.file_list.currentItem():
-            # Update source_states for Local Files
-            self.parent.interface.source_states[self.source_name] = True
             # Map outputs to HDMI ports
             selected_outputs = self.parent.input_output_map.get(LOCAL_FILES_INPUT_NUM, [DEFAULT_OUTPUT_INDEX])
             if not selected_outputs:
@@ -199,10 +197,16 @@ class SourceScreen:
                             hdmi_map[hdmi_idx] = []
                         hdmi_map[hdmi_idx].append(output_idx)
             logging.debug(f"SourceScreen: Playback HDMI map: {hdmi_map}")
-            file_path = os.path.join(self.source_paths[self.current_source], self.file_list.currentItem().text())
-            self.playing_file = self.file_list.currentItem().text()  # Track playing file
-            # Pass file path and hdmi_map to toggle_play_pause
-            self.parent.playback.toggle_play_pause(self.source_name, file_path, hdmi_map)
+            selected_file = self.file_list.currentItem().text()
+            file_path = os.path.join(self.source_paths[self.current_source], selected_file)
+            try:
+                # Pass file path and hdmi_map to toggle_play_pause
+                self.parent.playback.toggle_play_pause(self.source_name, file_path, hdmi_map)
+                is_playing = self.parent.interface.source_states.get(self.source_name, False)
+                self.playing_file = selected_file if is_playing else None
+            except Exception as e:
+                logging.error(f"SourceScreen: Play action failed: {e}")
+                self.playing_file = None
             self.update_playback_state()
         else:
             logging.warning("SourceScreen: Play button clicked but no file selected")
