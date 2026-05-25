@@ -33,7 +33,7 @@
 # - Called by: source_screen.py.
 # - Used by: kiosk.py (load_and_apply_schedule).
 
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QPushButton, QLabel
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QPushButton, QLabel, QMessageBox
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 import logging
@@ -108,6 +108,10 @@ class ScheduleDialog(QDialog):
         """)
         logging.debug("ScheduleDialog: UI setup completed")
 
+    def _show_validation_error(self, message):
+        logging.warning(f"ScheduleDialog: {message}")
+        QMessageBox.warning(self, "Invalid Schedule Input", message)
+
     def save_schedule(self):
         # Saves the schedule task to schedule.json
         try:
@@ -116,29 +120,31 @@ class ScheduleDialog(QDialog):
             path = self.path_input.text().strip()
 
             if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", time):
-                logging.warning(f"ScheduleDialog: Invalid time format: {time}")
+                self._show_validation_error("Time must be in 24-hour HH:MM format.")
                 return
 
             allowed_outputs = set(TV_OUTPUTS.values())
             output_tokens = [token.strip() for token in outputs_raw.split(",") if token.strip()]
             if not output_tokens:
-                logging.warning("ScheduleDialog: No outputs provided")
+                self._show_validation_error("Provide at least one output number.")
                 return
 
             outputs = []
             for token in output_tokens:
                 if not token.isdigit():
-                    logging.warning(f"ScheduleDialog: Non-numeric output: {token}")
+                    self._show_validation_error(f"Output '{token}' is not a valid number.")
                     return
                 output_num = int(token)
                 if output_num not in allowed_outputs:
-                    logging.warning(f"ScheduleDialog: Output out of range: {output_num}")
+                    self._show_validation_error(
+                        f"Output '{output_num}' is not configured. Valid outputs: {sorted(allowed_outputs)}."
+                    )
                     return
                 if output_num not in outputs:
                     outputs.append(output_num)
 
             if not time or not outputs or not path:
-                logging.warning("ScheduleDialog: Incomplete input")
+                self._show_validation_error("Time, outputs, and video path are required.")
                 return
             
             schedule_entry = {

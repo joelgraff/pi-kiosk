@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+# Commands suffixed with `|| true` are intentionally non-fatal (best-effort cleanup/mounting).
 
 PROJECT_ROOT="/home/admin/kiosk"
 LOG_DIR="$PROJECT_ROOT/logs"

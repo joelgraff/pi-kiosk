@@ -184,7 +184,8 @@ def stream_url():
         logging.info(f"Started URL stream: url={url}, outputs={outputs}")
         return redirect(url_for('index'))
     except subprocess.CalledProcessError as exc:
-        logging.error(f"Failed to resolve stream URL: {url}, stderr={exc.stderr.strip() if exc.stderr else ''}")
+        stderr_text = (getattr(exc, "stderr", "") or "").strip()
+        logging.error(f"Failed to resolve stream URL: {url}, stderr={stderr_text}")
         return 'Failed to stream URL', 500
     except subprocess.TimeoutExpired:
         logging.error(f"Timed out resolving stream URL after {YT_DLP_TIMEOUT_SECONDS}s: {url}")
