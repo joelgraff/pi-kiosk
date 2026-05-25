@@ -37,9 +37,7 @@ from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QPushButton, QLabel
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 import logging
-import json
-import os
-from config import SCHEDULE_FILE
+from utilities import load_schedule, save_schedule
 
 class ScheduleDialog(QDialog):
     def __init__(self, parent, input_num):
@@ -126,16 +124,9 @@ class ScheduleDialog(QDialog):
                 "repeat": "Daily"
             }
             
-            try:
-                with open(SCHEDULE_FILE, "r") as f:
-                    schedule_data = json.load(f)
-            except FileNotFoundError:
-                schedule_data = []
-            
+            schedule_data = load_schedule()
             schedule_data.append(schedule_entry)
-            os.makedirs(os.path.dirname(SCHEDULE_FILE), exist_ok=True)
-            with open(SCHEDULE_FILE, "w") as f:
-                json.dump(schedule_data, f, indent=4)
+            save_schedule(schedule_data)
             
             logging.debug(f"ScheduleDialog: Saved schedule entry: {schedule_entry}")
             self.accept()
