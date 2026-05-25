@@ -2,9 +2,10 @@
 set -euo pipefail
 # Commands suffixed with `|| true` are intentionally non-fatal (best-effort cleanup/mounting).
 
-PROJECT_ROOT="/home/admin/kiosk"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="${PI_KIOSK_ROOT:-$SCRIPT_DIR}"
 LOG_DIR="$PROJECT_ROOT/logs"
-VIDEO_DIR="/home/admin/videos"
+VIDEO_DIR="${PI_KIOSK_VIDEO_DIR:-/home/admin/videos}"
 FLASK_APP="$PROJECT_ROOT/flask_server.py"
 KIOSK_APP="$PROJECT_ROOT/gui/kiosk.py"
 CLEANUP_APP="$PROJECT_ROOT/gui/cleanup_videos.py"

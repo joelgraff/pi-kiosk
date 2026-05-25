@@ -17,14 +17,27 @@
 # - Updated VIDEO_DIR to /home/admin/videos (outside project root).
 # - Added HDMI_OUTPUTS to map TV outputs to HDMI ports.
 
+import os
+import warnings
+
 from PyQt5.QtGui import QFont
 
 # Filepaths
-PROJECT_ROOT = "/home/admin/kiosk"
+DEFAULT_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ENV_PROJECT_ROOT = os.environ.get("PI_KIOSK_ROOT")
+PROJECT_ROOT = os.path.abspath(ENV_PROJECT_ROOT) if ENV_PROJECT_ROOT else DEFAULT_PROJECT_ROOT
+if not os.path.isdir(os.path.join(PROJECT_ROOT, "gui")):
+    if ENV_PROJECT_ROOT:
+        warnings.warn(
+            f"PI_KIOSK_ROOT '{ENV_PROJECT_ROOT}' is invalid; falling back to detected project root '{DEFAULT_PROJECT_ROOT}'.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    PROJECT_ROOT = DEFAULT_PROJECT_ROOT
 LOG_DIR = f"{PROJECT_ROOT}/logs"
 LOG_FILE = f"{LOG_DIR}/kiosk.log"
-VIDEO_DIR = "/home/admin/videos"  # Videos are under user root
-ICON_DIR = f"{PROJECT_ROOT}/icons"
+VIDEO_DIR = os.environ.get("PI_KIOSK_VIDEO_DIR", "/home/admin/videos")  # Videos are under user root
+ICON_DIR = f"{PROJECT_ROOT}/gui/icons"
 SCHEDULE_FILE = f"{PROJECT_ROOT}/schedule.json"
 NETWORK_SHARE_DIR = "/mnt/share"  # External mount
 USB_STORAGE_DIR = "/mnt/usb"      # External mount
