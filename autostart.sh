@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -uo pipefail
 
 PROJECT_ROOT="/home/admin/kiosk"
 LOG_DIR="$PROJECT_ROOT/logs"
@@ -34,7 +34,11 @@ sudo mount -a || true
 echo "Checking for USB..."
 if [ -b /dev/sda1 ]; then
     sudo mkdir -p /mnt/usb
-    mountpoint -q /mnt/usb || sudo mount /dev/sda1 /mnt/usb || true
+    if ! mountpoint -q /mnt/usb; then
+        if ! sudo mount /dev/sda1 /mnt/usb; then
+            echo "Warning: Failed to mount USB device /dev/sda1"
+        fi
+    fi
 fi
 
 # Wait for network and Wayland

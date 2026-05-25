@@ -49,6 +49,12 @@ def qt_message_handler(msg_type, context, msg):
     logging.log(log_levels.get(msg_type, logging.INFO), f"Qt: {msg}")
     print(f"Qt: {msg}")
 
+# Basic fallback logging before file logger is available
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s: %(message)s"
+)
+
 # Ensure required directories
 try:
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -62,7 +68,8 @@ except Exception as e:
 logging.basicConfig(
     filename=LOG_FILE,
     level=logging.DEBUG,
-    format="%(asctime)s %(levelname)s: %(message)s"
+    format="%(asctime)s %(levelname)s: %(message)s",
+    force=True
 )
 
 # Set up signal handling

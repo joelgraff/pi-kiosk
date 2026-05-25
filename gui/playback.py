@@ -61,7 +61,7 @@ class Playback:
             if not outputs:
                 outputs = [DEFAULT_OUTPUT_INDEX]
                 self.parent.input_output_map[input_num] = outputs
-            hdmi_map = hdmi_map or self._build_hdmi_map(outputs)
+            hdmi_map = hdmi_map if hdmi_map is not None else self._build_hdmi_map(outputs)
             
             if not os.path.exists(file_path):
                 logging.error(f"Video file does not exist: {file_path}")
