@@ -172,15 +172,19 @@ def stream_url():
     hdmi_map = build_hdmi_map(outputs)
 
     try:
-        stream_url = subprocess.check_output(
+        result = subprocess.run(
             ["yt-dlp", "-g", url],
+            capture_output=True,
+            text=True,
+            check=True,
             timeout=YT_DLP_TIMEOUT_SECONDS,
-        ).decode().strip()
+        )
+        stream_url = result.stdout.strip()
         play_with_mpv(stream_url, hdmi_map)
         logging.info(f"Started URL stream: url={url}, outputs={outputs}")
         return redirect(url_for('index'))
-    except subprocess.CalledProcessError:
-        logging.error(f"Failed to resolve stream URL: {url}")
+    except subprocess.CalledProcessError as exc:
+        logging.error(f"Failed to resolve stream URL: {url}, stderr={exc.stderr.strip() if exc.stderr else ''}")
         return 'Failed to stream URL', 500
     except subprocess.TimeoutExpired:
         logging.error(f"Timed out resolving stream URL after {YT_DLP_TIMEOUT_SECONDS}s: {url}")
