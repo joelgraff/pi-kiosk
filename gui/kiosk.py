@@ -23,13 +23,19 @@ import os
 import signal
 import threading
 import logging
+import hashlib
 import schedule
 from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget
 from PyQt5.QtCore import Qt, QtMsgType, QTimer
 from interface import Interface
 from playback import Playback
 from utilities import signal_handler, run_scheduler, load_schedule, SyncNetworkShare
-from config import LOG_DIR, LOG_FILE, VIDEO_DIR, ICON_DIR, INPUTS, WINDOW_SIZE, QT_PLATFORM, MAIN_WINDOW_GRADIENT, LABEL_COLOR
+from auth_dialog import AuthDialog
+from config import (
+    LOG_DIR, LOG_FILE, VIDEO_DIR, ICON_DIR, INPUTS, WINDOW_SIZE, QT_PLATFORM,
+    MAIN_WINDOW_GRADIENT, LABEL_COLOR, PIN, ENABLE_LOCAL_AUTH,
+    LOCAL_FILES_INPUT_NUM, DEFAULT_OUTPUT_INDEX
+)
 
 # Custom Qt message handler to log Qt messages
 def qt_message_handler(msg_type, context, msg):
@@ -43,13 +49,6 @@ def qt_message_handler(msg_type, context, msg):
     logging.log(log_levels.get(msg_type, logging.INFO), f"Qt: {msg}")
     print(f"Qt: {msg}")
 
-# Set up logging
-logging.basicConfig(
-    filename=LOG_FILE,
-    level=logging.DEBUG,
-    format="%(asctime)s %(levelname)s: %(message)s"
-)
-
 # Ensure required directories
 try:
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -58,6 +57,13 @@ try:
 except Exception as e:
     logging.error(f"Failed to create directories: {e}")
     sys.exit(1)
+
+# Set up logging
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s: %(message)s"
+)
 
 # Set up signal handling
 signal.signal(signal.SIGINT, signal_handler)
@@ -85,11 +91,11 @@ class KioskGUI(QMainWindow):
 
             self.input_map = {name: info["input_num"] for name, info in INPUTS.items()}
             self.input_paths = {}
-            self.input_output_map = {}
+            self.input_output_map = {LOCAL_FILES_INPUT_NUM: [DEFAULT_OUTPUT_INDEX]}
             self.active_inputs = {}
             self.selected_source = None
             self.media_processes = {}
-            self.authenticated = True  # Bypass authentication
+            self.authenticated = not ENABLE_LOCAL_AUTH
             logging.debug(f"Initialized input_map: {self.input_map}")
 
             logging.debug("Initializing Playback")
@@ -107,13 +113,34 @@ class KioskGUI(QMainWindow):
             self.scheduler_thread.start()
             self.load_and_apply_schedule()
 
-            QTimer.singleShot(0, self.show_controls)
+            if ENABLE_LOCAL_AUTH:
+                QTimer.singleShot(0, self.show_auth_dialog)
+            else:
+                QTimer.singleShot(0, self.show_controls)
         except Exception as e:
             logging.error(f"Initialization failed: {e}")
             sys.exit(1)
 
+    def show_auth_dialog(self):
+        try:
+            auth_dialog = AuthDialog(self)
+            if auth_dialog.exec_() == auth_dialog.Accepted:
+                entered_pin_hash = auth_dialog.get_pin()
+                expected_pin_hash = hashlib.sha256(PIN.encode()).hexdigest()
+                if entered_pin_hash == expected_pin_hash:
+                    self.authenticated = True
+                    self.show_controls()
+                    return
+            logging.warning("Authentication failed")
+            QTimer.singleShot(0, self.show_auth_dialog)
+        except Exception as e:
+            logging.error(f"Failed to show auth dialog: {e}")
+            sys.exit(1)
+
     def show_controls(self):
         try:
+            if ENABLE_LOCAL_AUTH and not self.authenticated:
+                return
             logging.debug("Showing controls")
             for widget in self.source_screens:
                 try:

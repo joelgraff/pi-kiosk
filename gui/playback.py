@@ -43,7 +43,7 @@ import os
 import subprocess
 import logging
 from utilities import stub_matrix_route
-from config import LOG_DIR
+from config import LOG_DIR, HDMI_OUTPUTS, DEFAULT_OUTPUT_INDEX, INPUTS
 
 class Playback:
     def __init__(self, parent):
@@ -58,13 +58,13 @@ class Playback:
             logging.debug(f"Attempting toggle play/pause for source: {source_name}, path: {file_path}, hdmi_map: {hdmi_map}")
             input_num = self.parent.input_map.get(source_name, 2)  # Default to 2 for Local Files
             outputs = self.parent.input_output_map.get(input_num, [])
+            if not outputs:
+                outputs = [DEFAULT_OUTPUT_INDEX]
+                self.parent.input_output_map[input_num] = outputs
+            hdmi_map = hdmi_map or self._build_hdmi_map(outputs)
             
             if not os.path.exists(file_path):
                 logging.error(f"Video file does not exist: {file_path}")
-                return
-            
-            if not outputs or not hdmi_map:
-                logging.warning(f"No outputs or HDMI map specified for input {input_num}")
                 return
             
             if self.parent.active_inputs.get(input_num, False):
@@ -96,9 +96,8 @@ class Playback:
                 logging.debug(f"Executing MPV command: {' '.join(cmd)}")
                 process = subprocess.Popen(
                     cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    universal_newlines=True
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
                 )
                 # Check if process started
                 if process.poll() is not None:
@@ -108,7 +107,9 @@ class Playback:
                 self.media_processes[(input_num, hdmi_idx)] = process
                 logging.debug(f"Started playback for input {input_num} on HDMI {hdmi_idx}, PID: {process.pid}")
             self.parent.active_inputs[input_num] = True
-            self.parent.interface.source_states[self.parent.selected_source] = True
+            source_name = self._input_name(input_num)
+            if source_name:
+                self.parent.interface.source_states[source_name] = True
         except Exception as e:
             logging.error(f"Start playback failed for input {input_num}: {e}")
             raise
@@ -127,7 +128,9 @@ class Playback:
                     except Exception as e:
                         logging.error(f"Failed to stop playback for input {input_num} on HDMI {key[1]}: {e}")
             self.parent.active_inputs[input_num] = False
-            self.parent.interface.source_states[self.parent.selected_source] = False
+            source_name = self._input_name(input_num)
+            if source_name:
+                self.parent.interface.source_states[source_name] = False
             logging.debug(f"Stopped playback for input {input_num}")
         except Exception as e:
             logging.error(f"Stop playback failed for input {input_num}: {e}")
@@ -151,12 +154,27 @@ class Playback:
             if not os.path.exists(path):
                 logging.error(f"Scheduled video file does not exist: {path}")
                 return
-            if stub_matrix_route(input_num, outputs):
-                # For scheduled tasks, assume single HDMI output (adjust if needed)
-                self.start_playback(input_num, path, outputs, {0: outputs})
-                logging.debug(f"Scheduled playback executed for input {input_num} on outputs {outputs}")
+            selected_outputs = outputs or [DEFAULT_OUTPUT_INDEX]
+            hdmi_map = self._build_hdmi_map(selected_outputs)
+            if stub_matrix_route(input_num, selected_outputs):
+                self.start_playback(input_num, path, selected_outputs, hdmi_map)
+                logging.debug(f"Scheduled playback executed for input {input_num} on outputs {selected_outputs}")
             else:
-                logging.error(f"Scheduled routing failed for input {input_num} to outputs {outputs}")
+                logging.error(f"Scheduled routing failed for input {input_num} to outputs {selected_outputs}")
         except Exception as e:
             logging.error(f"Scheduled task failed for input {input_num}: {e}")
             raise
+
+    def _build_hdmi_map(self, outputs):
+        hdmi_map = {}
+        for hdmi_idx, output_indices in HDMI_OUTPUTS.items():
+            selected = [output_idx for output_idx in output_indices if output_idx in outputs]
+            if selected:
+                hdmi_map[hdmi_idx] = selected
+        return hdmi_map
+
+    def _input_name(self, input_num):
+        for source_name, info in INPUTS.items():
+            if info["input_num"] == input_num:
+                return source_name
+        return None

@@ -41,7 +41,7 @@ from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal, QObject
 import logging
 import os
 import sys
-from config import VIDEO_DIR, NETWORK_SHARE_DIR, ICON_DIR, LOCAL_FILES_INPUT_NUM
+from config import VIDEO_DIR, NETWORK_SHARE_DIR, ICON_DIR, LOCAL_FILES_INPUT_NUM, DEFAULT_OUTPUT_INDEX
 
 try:
     from source_screen_ui import setup_ui
@@ -114,6 +114,7 @@ class SourceScreen:
             self.usb_path = os.path.join(usb_base, os.listdir(usb_base)[0])
         self.current_source = "Internal" if not self.usb_path else "USB"
         self.source_paths = {"Internal": VIDEO_DIR, "USB": self.usb_path}
+        self.parent.input_output_map.setdefault(LOCAL_FILES_INPUT_NUM, [DEFAULT_OUTPUT_INDEX])
         self.setup_ui()
         self.check_sync_status()  # Check sync status on init
         logging.debug(f"SourceScreen: Initialized for {self.source_name}")
@@ -187,7 +188,10 @@ class SourceScreen:
             # Update source_states for Local Files
             self.parent.interface.source_states[self.source_name] = True
             # Map outputs to HDMI ports
-            selected_outputs = self.parent.input_output_map.get(LOCAL_FILES_INPUT_NUM, [])
+            selected_outputs = self.parent.input_output_map.get(LOCAL_FILES_INPUT_NUM, [DEFAULT_OUTPUT_INDEX])
+            if not selected_outputs:
+                selected_outputs = [DEFAULT_OUTPUT_INDEX]
+                self.parent.input_output_map[LOCAL_FILES_INPUT_NUM] = selected_outputs
             hdmi_map = {}
             for hdmi_idx, output_indices in HDMI_OUTPUTS.items():
                 for output_idx in output_indices:

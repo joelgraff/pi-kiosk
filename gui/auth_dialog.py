@@ -49,6 +49,7 @@ class AuthDialog(QDialog):
         super().__init__(parent)
         logging.debug("AuthDialog: Initializing")
         self.setWindowTitle("Authentication")
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setup_ui()
         logging.debug(f"AuthDialog: Initialized, visible: {self.isVisible()}, geometry: {self.geometry().getRect()}, parent: {self.parent()}")
 
@@ -67,6 +68,7 @@ class AuthDialog(QDialog):
         self.pin_input.setEchoMode(QLineEdit.Password)
         self.pin_input.setStyleSheet("color: black; background: white;")
         self.pin_input.setFixedWidth(200)
+        self.pin_input.returnPressed.connect(self.accept)
         layout.addWidget(self.pin_input)
         
         auth_button = QPushButton("Authenticate")

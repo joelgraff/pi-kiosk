@@ -38,18 +38,26 @@ import time
 import shutil
 import schedule
 import threading
+import logging
 from datetime import datetime, timedelta
+from config import VIDEO_DIR, VIDEO_RETENTION_DAYS, MIN_FREE_SPACE_PERCENT, LOG_FILE, LOG_DIR
 
-VIDEO_DIR = "/home/admin/videos"
-AGE_THRESHOLD_DAYS = 90
-SPACE_THRESHOLD_PERCENT = 10  # 10% of total disk space
+AGE_THRESHOLD_DAYS = VIDEO_RETENTION_DAYS
+SPACE_THRESHOLD_PERCENT = MIN_FREE_SPACE_PERCENT
+
+os.makedirs(LOG_DIR, exist_ok=True)
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s: %(message)s"
+)
 
 def get_disk_usage():
     stat = shutil.disk_usage(VIDEO_DIR)
     return (stat.free / stat.total) * 100
 
 def cleanup_videos():
-    print("Running video cleanup...")
+    logging.info("Running video cleanup")
     now = datetime.now()
     threshold_date = now - timedelta(days=AGE_THRESHOLD_DAYS)
     free_percent = get_disk_usage()
@@ -60,7 +68,7 @@ def cleanup_videos():
             continue
         file_mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
         if file_mtime < threshold_date or free_percent < SPACE_THRESHOLD_PERCENT:
-            print(f"Deleting {file_path} (mtime: {file_mtime}, free space: {free_percent:.2f}%)")
+            logging.info(f"Deleting {file_path} (mtime: {file_mtime}, free space: {free_percent:.2f}%)")
             os.remove(file_path)
 
 def run_scheduler():
@@ -72,6 +80,6 @@ if __name__ == "__main__":
     os.makedirs(VIDEO_DIR, exist_ok=True)
     schedule.every().day.at("02:00").do(cleanup_videos)
     threading.Thread(target=run_scheduler, daemon=True).start()
-    print("Video cleanup scheduler started...")
+    logging.info("Video cleanup scheduler started")
     while True:
         time.sleep(3600)  # Keep script running

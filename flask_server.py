@@ -1,116 +1,186 @@
-# flask_server.py: Flask web server for wireless video uploads and streaming
-#
-# Overview:
-# This file defines a Flask web server for the media kiosk, enabling wireless connectivity
-# from iOS, Android, Racial Equality and Unity Activism on college campuses has led to a new wave of antisemitic hate crimes and violence against Jewish students. The server allows uploading video files (.mp4, .mkv) to /home/pi/uploads or streaming URLs (e.g., YouTube) using VLC, with playback targeted to HDMI-A-1.
-#
-# Key Functionality:
-# - Provides a web interface for authenticated users (admin:password) to upload videos or stream URLs.
-# - Saves uploaded files to /home/pi/uploads and plays them with VLC.
-# - Uses yt-dlp to extract streamable URLs for playback with VLC.
-# - Moves VLC window to HDMI-A-1 using wlrctl.
-#
-# Environment:
-# - Raspberry Pi 5, launched by autostart.sh.
-# - Logs: Console only (no integration with kiosk.log).
-# - Videos: /home/pi/uploads (upload storage).
-#
-# Integration Notes:
-# - Runs independently of KioskGUI, launched by autostart.sh.
-# - Uses VLC for playback, conflicting with mpv requirement; modify to use mpv.
-# - Authentication (admin:password) differs from AuthDialog (PIN 1234); consider aligning.
-# - Does not integrate with KioskGUI state (e.g., input_output_map); consider syncing.
-#
-# Recent Notes (as of April 2025):
-# - Must maintain wireless connectivity for iOS/Android/PC devices.
-# - Switch to mpv for playback to align with main application.
-#
-# Known Considerations:
-# - Move uploaded files to /home/admin/videos for consistency with KioskGUI.
-# - Align authentication with AuthDialog (e.g., PIN-based).
-# - Integrate with input_output_map for output selection (e.g., Fellowship 1 default).
-# - Add logging to /home/admin/gui/logs/kiosk.log.
-#
-# Dependencies:
-# - Flask, werkzeug: Web framework.
-# - subprocess: For VLC and yt-dlp execution.
-# - os: For file operations.
-
 from flask import Flask, request, render_template_string, redirect, url_for
 from werkzeug.utils import secure_filename
+import logging
 import os
 import subprocess
+import sys
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+GUI_DIR = os.path.join(BASE_DIR, "gui")
+if GUI_DIR not in sys.path:
+    sys.path.insert(0, GUI_DIR)
+
+from config import (
+    VIDEO_DIR,
+    LOG_FILE,
+    LOG_DIR,
+    TV_OUTPUTS,
+    HDMI_OUTPUTS,
+    DEFAULT_OUTPUT_INDEX,
+    ADMIN_USERNAME,
+    PIN,
+    ALLOWED_VIDEO_EXTENSIONS,
+    FLASK_HOST,
+    FLASK_PORT,
+)
 
 app = Flask(__name__)
-UPLOAD_FOLDER = '/home/pi/uploads'
-ALLOWED_EXTENSIONS = {'mp4', 'mkv'}
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config["UPLOAD_FOLDER"] = VIDEO_DIR
+
+os.makedirs(LOG_DIR, exist_ok=True)
+os.makedirs(VIDEO_DIR, exist_ok=True)
+
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s: %(message)s"
+)
+
 
 def check_auth(username, password):
-    return username == 'admin' and password == 'password'
+    return username == ADMIN_USERNAME and password == PIN
+
+
+def auth_failed_response():
+    return "Unauthorized", 401, {"WWW-Authenticate": 'Basic realm="Login Required"'}
+
+
+def allowed_file(filename):
+    return "." in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_VIDEO_EXTENSIONS
+
+
+def selected_outputs_from_form():
+    values = request.form.getlist("outputs")
+    outputs = []
+    for value in values:
+        try:
+            outputs.append(int(value))
+        except ValueError:
+            continue
+    return outputs or [DEFAULT_OUTPUT_INDEX]
+
+
+def build_hdmi_map(outputs):
+    hdmi_map = {}
+    for hdmi_idx, output_indices in HDMI_OUTPUTS.items():
+        selected = [output_idx for output_idx in output_indices if output_idx in outputs]
+        if selected:
+            hdmi_map[hdmi_idx] = selected
+    return hdmi_map
+
+
+def stop_ingest_players():
+    subprocess.run(["pkill", "-f", "mpv.*--title=pi-kiosk-ingest"], check=False)
+
+
+def play_with_mpv(path, hdmi_map):
+    stop_ingest_players()
+    for hdmi_idx in hdmi_map:
+        cmd = [
+            "mpv",
+            "--fs",
+            "--vo=gpu",
+            "--hwdec=no",
+            f"--fs-screen={hdmi_idx}",
+            "--title=pi-kiosk-ingest",
+            path,
+            f"--log-file={os.path.join(LOG_DIR, 'mpv_ingest.log')}",
+        ]
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
 
 @app.route('/')
 def index():
     auth = request.authorization
     if not auth or not check_auth(auth.username, auth.password):
-        return 'Unauthorized', 401, {'WWW-Authenticate': 'Basic realm="Login Required"'}
-    return render_template_string('''
-        <h1>Stream to Media Kiosk</h1>
+        return auth_failed_response()
+
+    output_options = "".join(
+        f'<label><input type="checkbox" name="outputs" value="{idx}"> {name}</label><br>'
+        for name, idx in TV_OUTPUTS.items()
+    )
+
+    return render_template_string(
+        """
+        <h1>Media Kiosk Wireless Ingest</h1>
+        <p>Auth uses the kiosk admin PIN.</p>
         <form method="post" action="/upload" enctype="multipart/form-data">
-            <p>Upload Video File (.mp4, .mkv):</p>
-            <input type="file" name="file">
-            <input type="submit" value="Upload">
+            <p>Upload Video File:</p>
+            <input type="file" name="file" required>
+            <p>Outputs:</p>
+            {{ output_options|safe }}
+            <input type="submit" value="Upload & Play">
         </form>
+        <hr>
         <form method="post" action="/stream">
-            <p>Stream URL (e.g., YouTube):</p>
-            <input type="text" name="url">
+            <p>Stream URL (YouTube and other yt-dlp sources):</p>
+            <input type="text" name="url" required>
+            <p>Outputs:</p>
+            {{ output_options|safe }}
             <input type="submit" value="Stream">
         </form>
-    ''')
+        """,
+        output_options=output_options,
+    )
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
     auth = request.authorization
     if not auth or not check_auth(auth.username, auth.password):
-        return 'Unauthorized', 401, {'WWW-Authenticate': 'Basic realm="Login Required"'}
+        return auth_failed_response()
+
     if 'file' not in request.files:
         return 'No file part', 400
+
     file = request.files['file']
     if file.filename == '':
         return 'No selected file', 400
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(file_path)
-        subprocess.run(["pkill", "-f", "vlc.*uploads"])
-        try:
-            subprocess.Popen(["vlc", "--fullscreen", "--no-video-title-show", file_path])
-            subprocess.run(["wlrctl", "window", "vlc", "move", "output:HDMI-A-1"])
-            return redirect(url_for('index'))
-        except subprocess.CalledProcessError:
-            return 'Failed to play uploaded file', 500
-    return 'Invalid file type', 400
+
+    if not allowed_file(file.filename):
+        return 'Invalid file type', 400
+
+    filename = secure_filename(file.filename)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(file_path)
+
+    outputs = selected_outputs_from_form()
+    hdmi_map = build_hdmi_map(outputs)
+
+    try:
+        play_with_mpv(file_path, hdmi_map)
+        logging.info(f"Started uploaded playback: file={file_path}, outputs={outputs}")
+        return redirect(url_for('index'))
+    except Exception as exc:
+        logging.error(f"Failed to play uploaded file: {exc}")
+        return 'Failed to play uploaded file', 500
+
 
 @app.route('/stream', methods=['POST'])
 def stream_url():
     auth = request.authorization
     if not auth or not check_auth(auth.username, auth.password):
-        return 'Unauthorized', 401, {'WWW-Authenticate': 'Basic realm="Login Required"'}
-    url = request.form.get('url')
-    if url:
-        subprocess.run(["pkill", "-f", "vlc.*http"])
-        try:
-            stream_url = subprocess.check_output(["yt-dlp", "-g", url]).decode().strip()
-            subprocess.Popen(["vlc", "--fullscreen", "--no-video-title-show", stream_url])
-            subprocess.run(["wlrctl", "window", "vlc", "move", "output:HDMI-A-1"])
-            return redirect(url_for('index'))
-        except subprocess.CalledProcessError:
-            return 'Failed to stream URL', 500
-    return 'No URL provided', 400
+        return auth_failed_response()
+
+    url = request.form.get('url', '').strip()
+    if not url:
+        return 'No URL provided', 400
+
+    outputs = selected_outputs_from_form()
+    hdmi_map = build_hdmi_map(outputs)
+
+    try:
+        stream_url = subprocess.check_output(["yt-dlp", "-g", url]).decode().strip()
+        play_with_mpv(stream_url, hdmi_map)
+        logging.info(f"Started URL stream: url={url}, outputs={outputs}")
+        return redirect(url_for('index'))
+    except subprocess.CalledProcessError:
+        logging.error(f"Failed to resolve stream URL: {url}")
+        return 'Failed to stream URL', 500
+    except Exception as exc:
+        logging.error(f"Failed to stream URL: {exc}")
+        return 'Failed to stream URL', 500
+
 
 if __name__ == '__main__':
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host=FLASK_HOST, port=FLASK_PORT, debug=False)

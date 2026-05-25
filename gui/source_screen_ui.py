@@ -164,8 +164,13 @@ def setup_ui(self):
         button.setFixedSize(*OUTPUT_BUTTON_SIZE)
         button.setCheckable(True)
         output_idx = TV_OUTPUTS[name]
-        is_current = 2 in self.parent.input_output_map and output_idx in self.parent.input_output_map.get(2, [])
-        is_other = any(other_input != 2 and output_idx in self.parent.input_output_map.get(other_input, []) and self.parent.active_inputs.get(other_input, False) for other_input in self.parent.input_output_map)
+        is_current = LOCAL_FILES_INPUT_NUM in self.parent.input_output_map and output_idx in self.parent.input_output_map.get(LOCAL_FILES_INPUT_NUM, [])
+        is_other = any(
+            other_input != LOCAL_FILES_INPUT_NUM and
+            output_idx in self.parent.input_output_map.get(other_input, []) and
+            self.parent.active_inputs.get(other_input, False)
+            for other_input in self.parent.input_output_map
+        )
         self.update_output_button_style(name, is_current, is_other)
         button.clicked.connect(lambda checked, n=name: self.toggle_output(n, checked))
         stylesheet = f"""
@@ -244,7 +249,7 @@ def setup_ui(self):
         button = QPushButton()
         button.setFixedSize(*new_play_stop_size)
         button.setFont(QFont(*WIDGET_FONT))
-        icon_path = os.path.join("/home/admin/kiosk/gui/icons", icon)
+        icon_path = os.path.join(ICON_DIR, icon)
         if os.path.exists(icon_path):
             button.setIcon(QIcon(icon_path))
             logging.debug(f"SourceScreen: Loaded custom icon for {action}: {icon_path}")
@@ -278,7 +283,7 @@ def setup_ui(self):
 
 def file_selected(self, item):
     logging.debug(f"SourceScreen: File selected: {item.text()}")
-    invalid_items = ["No directory found", "No permission to access directory", "No video files found", "Error loading files"]
+    invalid_items = ["No directory found", "No permission to access directory", "No video files found", "Error loading files", "Syncing...", "Sync failed"]
     if self.source_name == "Local Files" and item.text() not in invalid_items:
         file_path = os.path.join(self.source_paths[self.current_source], item.text())
         self.parent.input_paths[LOCAL_FILES_INPUT_NUM] = file_path

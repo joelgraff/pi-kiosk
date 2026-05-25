@@ -28,6 +28,9 @@ ICON_DIR = f"{PROJECT_ROOT}/icons"
 SCHEDULE_FILE = f"{PROJECT_ROOT}/schedule.json"
 NETWORK_SHARE_DIR = "/mnt/share"  # External mount
 USB_STORAGE_DIR = "/mnt/usb"      # External mount
+FLASK_SERVER_PATH = f"{PROJECT_ROOT}/flask_server.py"
+KIOSK_APP_PATH = f"{PROJECT_ROOT}/gui/kiosk.py"
+CLEANUP_SCRIPT_PATH = f"{PROJECT_ROOT}/gui/cleanup_videos.py"
 ICON_FILES = {
     "play": "play.png",
     "stop": "stop.png",
@@ -42,6 +45,8 @@ TV_OUTPUTS = {
     "Sanctuary": 4
 }
 TOTAL_TV_OUTPUTS = len(TV_OUTPUTS)
+DEFAULT_OUTPUT_NAME = "Fellowship 1"
+DEFAULT_OUTPUT_INDEX = TV_OUTPUTS[DEFAULT_OUTPUT_NAME]
 
 # HDMI Output Mappings
 HDMI_OUTPUTS = {
@@ -107,5 +112,13 @@ FILE_LIST_PADDING = 5
 BORDER_RADIUS = 8  # px
 
 # Other
-PIN = "1234"  # Hardcoded PIN (bypassed)
+PIN = "1234"
+ADMIN_USERNAME = "admin"
+ENABLE_LOCAL_AUTH = True
 LOCAL_FILES_INPUT_NUM = 2
+FLASK_HOST = "0.0.0.0"
+FLASK_PORT = 5000
+ALLOWED_VIDEO_EXTENSIONS = {"mp4", "mkv", "avi", "mov", "wmv", "flv"}
+STARTUP_NETWORK_WAIT_SECONDS = 10
+VIDEO_RETENTION_DAYS = 90
+MIN_FREE_SPACE_PERCENT = 10

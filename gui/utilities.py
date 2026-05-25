@@ -45,13 +45,11 @@
 
 import sys
 import os
-import signal
 import logging
 import json
 import shutil
 import time
 import schedule
-import threading
 from PyQt5.QtCore import QObject, pyqtSignal
 from config import NETWORK_SHARE_DIR, VIDEO_DIR, SCHEDULE_FILE
 
@@ -114,8 +112,9 @@ class SyncNetworkShare(QObject):
                 logging.error(f"Source directory {source_dir} does not exist")
                 self.progress.emit("Sync failed: Source not mounted")
                 return
+            os.makedirs(dest_dir, exist_ok=True)
             
-            files = [f for f in os.listdir(source_dir) if f.endswith((".mp4", ".mkv"))]
+            files = [f for f in os.listdir(source_dir) if f.lower().endswith((".mp4", ".mkv"))]
             total = len(files)
             if total == 0:
                 logging.info("No files to sync")
